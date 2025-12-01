@@ -1,7 +1,7 @@
-from email import header
 from astropy.io import fits
 import numpy as np
 import os
+from .file_loaders import load_isgri_events, load_isgri_pif, default_pif_metadata, merge_metadata
 
 
 class LightCurve:
@@ -60,113 +60,20 @@ class LightCurve:
             LightCurve: An instance of the LightCurve class.
 
         """
-
-        # if events_path is None:
-        #     if scw is None:
-        #         raise ValueError("Either events_path or scw must be provided.")
-        #     events_path = f"{archive_path}/{scw[:4]}/{scw}.001/isgri_events.fits.gz"
-        # if pif_path is None and source is not None:
-        #     pif_path = f"{mask_path}/{source}/{scw[:4]}/{scw}_isgri_model.fits.gz"
-
-        # if not os.path.exists(events_path):
-        #     raise FileNotFoundError(f"Events file {events_path} not found.")
-        # if pif_path and not os.path.exists(pif_path):
-        #     raise FileNotFoundError(f"PIF file {pif_path} not found.")
-
-        events, gtis, metadata = cls._load_events(cls, events_path)
-        if pif_path is None:
-            pif = np.ones(len(events))
-            metadata_pif = {
-                "SWID": metadata["SWID"],
-                "SRC_RA": None,
-                "SRC_DEC": None,
-                "Source_Name": None,
-                "cod": None,
-                "No_of_Modules": 8,
-            }
-
+        events, gtis, metadata = load_isgri_events(events_path)
+        if pif_path:
+            events, pif, metadata_pif = load_isgri_pif(pif_path, events, pif_threshold, pif_extension)
         else:
-            events, pif, metadata_pif = cls._load_pif(pif_path, events, pif_threshold, pif_extension)
-        if metadata["SWID"] != metadata_pif["SWID"]:
-            raise ValueError("SWID mismatch between events and PIF files.")
-        for key in metadata_pif:
-            if key == "SWID":
-                continue
-            metadata[key] = metadata_pif[key]
+            pif = np.ones(len(events))
+            metadata_pif = default_pif_metadata()
+
+        metadata = merge_metadata(metadata, metadata_pif)
         time = events["TIME"]
         energies = events["ISGRI_ENERGY"]
         dety, detz = events["DETY"], events["DETZ"]
         return cls(time, energies, gtis, dety, detz, pif, metadata)
 
-    @staticmethod
-    def _load_events(cls, events_path):
-        with fits.open(events_path) as hdu:
-            events = np.array(hdu["ISGR-EVTS-ALL"].data)
-            header = hdu["ISGR-EVTS-ALL"].header
-            metadata = {
-                "REVOL": header.get("REVOL"),
-                "SWID": header.get("SWID"),
-                "TSTART": header.get("TSTART"),
-                "TSTOP": header.get("TSTOP"),
-                "TELAPSE": header.get("TELAPSE"),
-                "OBT_TSTART": header.get("OBTSTART"),
-                "OBT_TSTOP": header.get("OBTEND"),
-                "RA_SCX": header.get("RA_SCX"),
-                "DEC_SCX": header.get("DEC_SCX"),
-                "RA_SCZ": header.get("RA_SCZ"),
-                "DEC_SCZ": header.get("DEC_SCZ"),
-            }
-            try:
-                gtis = np.array(hdu["IBIS-GNRL-GTI"].data)
-                gtis = np.array([gtis["START"], gtis["STOP"]]).T
-            except:
-                gtis = np.array([events["TIME"][0], events["TIME"][-1]]).reshape(1, 2)
-        events = events[events["SELECT_FLAG"] == 0]  # Filter out bad events
-        return events, gtis, metadata
-
-    @staticmethod
-    def _load_pif(pif_path, events, pif_threshold=0.5, pif_extension=-1):
-        with fits.open(pif_path) as hdu:
-            pif_file = np.array(hdu[-1].data)
-            header = hdu[-1].header
-        metadata_pif = {
-            "SWID": header.get("SWID"),
-            "Source_ID": header.get("SOURCEID"),
-            "Source_Name": header.get("NAME"),
-            "SRC_RA": header.get("RA_OBJ"),
-            "SRC_DEC": header.get("DEC_OBJ"),
-            "No_of_Modules": LightCurve.__est_mods(pif_file),
-            "cod": LightCurve._calc_cod(pif_file, events, pif_threshold),
-        }
-        pif_filter = pif_file > pif_threshold
-        piffed_events = events[pif_filter[events["DETZ"], events["DETY"]]]
-        pif = pif_file[piffed_events["DETZ"], piffed_events["DETY"]]
-        return piffed_events, pif, metadata_pif
-
-    @staticmethod
-    def _calc_cod(pif_file, events, pif_threshold):
-        pif_cod = pif_file == 1
-        pif_cod = events[pif_cod[events["DETZ"], events["DETY"]]]
-        cody = (np.max(pif_cod["DETY"]) - np.min(pif_cod["DETY"])) / 129
-        codz = (np.max(pif_cod["DETZ"]) - np.min(pif_cod["DETZ"])) / 133
-        pif_cod = codz * cody
-        return pif_cod
-
-    @staticmethod
-    def __est_mods(mask):
-        m, n = [0, 32, 66, 100, 134], [0, 64, 130]  # Separate modules
-        mods = []
-        for x1, x2 in zip(m[:-1], m[1:]):
-            for y1, y2 in zip(n[:-1], n[1:]):
-                a = mask[x1:x2, y1:y2].flatten()
-                if len(a[a > 0.01]) / len(a) > 0.2:
-                    mods.append(1)
-                else:
-                    mods.append(0)
-        mods = np.array(mods)
-        return mods
-
-    def rebin(self, binsize, emin=30, emax=300, local=True, mask=None):
+    def rebin(self, binsize, emin=30, emax=300, local_time=True, custom_mask=None):
         """
         Rebins the events with the specified bin size and energy range.
 
@@ -190,23 +97,20 @@ class LightCurve:
             time, counts = rebin(100, emin=50, emax=200)
 
         """
+        
+        mask = (self.energies >= emin) & (self.energies < emax)
+        time = self.load_data if local_time else self.time
+        time = time[mask]
+        pif = self.pif
+        pif = pif[mask]
+        if custom_mask:
+            time = time[custom_mask]
+            pif = pif[custom_mask]
+
         binsize = (0.001 * binsize) / 86400
-        if mask is not None:
-            time = self.time[mask]
-            pif = self.pif[mask]
-            energies = self.energies[mask]
-        else:
-            time = self.time
-            pif = self.pif
-            energies = self.energies
-        time = time[(energies >= emin) & (energies < emax)]
-        pif = pif[(energies >= emin) & (energies < emax)]
         bins = np.arange(self.t0, time[-1] + binsize, binsize)
         counts, histbins = np.histogram(time, bins=bins, weights=pif)
-        if local:
-            time = np.array(((histbins[:-1] + 0.5 * binsize) - self.t0) * 86400)
-        else:
-            time = np.array(histbins[:-1] + 0.5 * binsize)
+        time = np.array(histbins[:-1] + 0.5 * binsize)
         return time, counts
 
     def cts(self, t1, t2, emin, emax, format="s", bkg=False):
