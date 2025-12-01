@@ -1,3 +1,4 @@
+from email import header
 from astropy.io import fits
 import numpy as np
 import os
@@ -33,25 +34,20 @@ class LightCurve:
 
     """
 
-    def __init__(self, time, energies, gtis, pif, pif_ra, pif_dec, pif_source, pif_cod, obt_ref, obt_time, mods):
+    def __init__(self, time, energies, gtis, dety, detz, pif, metadata):
         self.time = time
         self.energies = energies
         self.gtis = gtis
         self.t0 = time[0]
         self.local_time = (time - self.t0) * 86400
 
+        self.dety = dety
+        self.detz = detz
         self.pif = pif
-        self.pif_ra = pif_ra
-        self.pif_dec = pif_dec
-        self.pif_source = pif_source
-        self.pif_cod = pif_cod
-        self.pif_mods = mods
-
-        self._obt_ref = obt_ref
-        self._obt_time = obt_time
+        self.metadata = metadata
 
     @classmethod
-    def load_data(cls, events_path=None, pif_path=None, scw=None, source=None, pif_threshold=0.5):
+    def load_data(cls, events_path=None, pif_path=None, scw=None, source=None, pif_threshold=0.5, pif_extension=-1):
         """
         Loads the events from the given events file and PIF file (optional). It assumes that the source is in last extension of the PIF file.
 
@@ -65,60 +61,98 @@ class LightCurve:
 
         """
 
-        if events_path is None:
-            if scw is None:
-                raise ValueError("Either events_path or scw must be provided.")
-            events_path = f"{archive_path}/{scw[:4]}/{scw}.001/isgri_events.fits.gz"
-        if pif_path is None and source is not None:
-            pif_path = f"{mask_path}/{source}/{scw[:4]}/{scw}_isgri_model.fits.gz"
+        # if events_path is None:
+        #     if scw is None:
+        #         raise ValueError("Either events_path or scw must be provided.")
+        #     events_path = f"{archive_path}/{scw[:4]}/{scw}.001/isgri_events.fits.gz"
+        # if pif_path is None and source is not None:
+        #     pif_path = f"{mask_path}/{source}/{scw[:4]}/{scw}_isgri_model.fits.gz"
 
-        if not os.path.exists(events_path):
-            raise FileNotFoundError(f"Events file {events_path} not found.")
-        if pif_path and not os.path.exists(pif_path):
-            raise FileNotFoundError(f"PIF file {pif_path} not found.")
+        # if not os.path.exists(events_path):
+        #     raise FileNotFoundError(f"Events file {events_path} not found.")
+        # if pif_path and not os.path.exists(pif_path):
+        #     raise FileNotFoundError(f"PIF file {pif_path} not found.")
 
+        events, gtis, metadata = cls._load_events(cls, events_path)
+        if pif_path is None:
+            pif = np.ones(len(events))
+            metadata_pif = {
+                "SWID": metadata["SWID"],
+                "SRC_RA": None,
+                "SRC_DEC": None,
+                "Source_Name": None,
+                "cod": None,
+                "No_of_Modules": 8,
+            }
+
+        else:
+            events, pif, metadata_pif = cls._load_pif(pif_path, events, pif_threshold, pif_extension)
+        if metadata["SWID"] != metadata_pif["SWID"]:
+            raise ValueError("SWID mismatch between events and PIF files.")
+        for key in metadata_pif:
+            if key == "SWID":
+                continue
+            metadata[key] = metadata_pif[key]
+        time = events["TIME"]
+        energies = events["ISGRI_ENERGY"]
+        dety, detz = events["DETY"], events["DETZ"]
+        return cls(time, energies, gtis, dety, detz, pif, metadata)
+
+    @staticmethod
+    def _load_events(cls, events_path):
         with fits.open(events_path) as hdu:
             events = np.array(hdu["ISGR-EVTS-ALL"].data)
+            header = hdu["ISGR-EVTS-ALL"].header
+            metadata = {
+                "REVOL": header.get("REVOL"),
+                "SWID": header.get("SWID"),
+                "TSTART": header.get("TSTART"),
+                "TSTOP": header.get("TSTOP"),
+                "TELAPSE": header.get("TELAPSE"),
+                "OBT_TSTART": header.get("OBTSTART"),
+                "OBT_TSTOP": header.get("OBTEND"),
+                "RA_SCX": header.get("RA_SCX"),
+                "DEC_SCX": header.get("DEC_SCX"),
+                "RA_SCZ": header.get("RA_SCZ"),
+                "DEC_SCZ": header.get("DEC_SCZ"),
+            }
             try:
                 gtis = np.array(hdu["IBIS-GNRL-GTI"].data)
                 gtis = np.array([gtis["START"], gtis["STOP"]]).T
             except:
                 gtis = np.array([events["TIME"][0], events["TIME"][-1]]).reshape(1, 2)
-
-            obt_time = float(hdu["ISGR-EVTS-ALL"].header["OBTSTART"])
-            obt_ref = hdu["ISGR-EVTS-ALL"].header["TSTART"]
-
         events = events[events["SELECT_FLAG"] == 0]  # Filter out bad events
+        return events, gtis, metadata
 
-        if pif_path is None:
-            pif = np.ones(len(events))
-            pif_ra = np.nan
-            pif_dec = np.nan
-            pif_source = None
-            pif_cod = np.nan
-            pif_nomods = 8
-        else:
-            # load pif file
-            pif_file = fits.open(pif_path)[-1]
-            pif_ra = pif_file.header["RA_OBJ"]
-            pif_dec = pif_file.header["DEC_OBJ"]
-            pif_source = pif_file.header["NAME"]
-            pif_file = np.array(pif_file.data)
-            pif_nomods = cls.__est_mods(pif_file)
-            # calculate cod
-            pif_cod = pif_file == 1
-            pif_cod = events[pif_cod[events["DETZ"], events["DETY"]]]
-            cody = (np.max(pif_cod["DETY"]) - np.min(pif_cod["DETY"])) / 129
-            codz = (np.max(pif_cod["DETZ"]) - np.min(pif_cod["DETZ"])) / 133
-            pif_cod = codz * cody
-            # filter pif and events
-            pif_filter = pif_file > pif_threshold
-            events = events[pif_filter[events["DETZ"], events["DETY"]]]
-            pif = pif_file[events["DETZ"], events["DETY"]]
-        time = events["TIME"]
-        energies = events["ISGRI_ENERGY"]
-        return cls(time, energies, gtis, pif, pif_ra, pif_dec, pif_source, pif_cod, obt_ref, obt_time, pif_nomods)
+    @staticmethod
+    def _load_pif(pif_path, events, pif_threshold=0.5, pif_extension=-1):
+        with fits.open(pif_path) as hdu:
+            pif_file = np.array(hdu[-1].data)
+            header = hdu[-1].header
+        metadata_pif = {
+            "SWID": header.get("SWID"),
+            "Source_ID": header.get("SOURCEID"),
+            "Source_Name": header.get("NAME"),
+            "SRC_RA": header.get("RA_OBJ"),
+            "SRC_DEC": header.get("DEC_OBJ"),
+            "No_of_Modules": LightCurve.__est_mods(pif_file),
+            "cod": LightCurve._calc_cod(pif_file, events, pif_threshold),
+        }
+        pif_filter = pif_file > pif_threshold
+        piffed_events = events[pif_filter[events["DETZ"], events["DETY"]]]
+        pif = pif_file[piffed_events["DETZ"], piffed_events["DETY"]]
+        return piffed_events, pif, metadata_pif
 
+    @staticmethod
+    def _calc_cod(pif_file, events, pif_threshold):
+        pif_cod = pif_file == 1
+        pif_cod = events[pif_cod[events["DETZ"], events["DETY"]]]
+        cody = (np.max(pif_cod["DETY"]) - np.min(pif_cod["DETY"])) / 129
+        codz = (np.max(pif_cod["DETZ"]) - np.min(pif_cod["DETZ"])) / 133
+        pif_cod = codz * cody
+        return pif_cod
+
+    @staticmethod
     def __est_mods(mask):
         m, n = [0, 32, 66, 100, 134], [0, 64, 130]  # Separate modules
         mods = []
