@@ -124,9 +124,10 @@ class QualityMetrics:
         """
         if counts is None:
             counts = self._compute_counts()["counts"]
-        mean_count, std_count = np.mean(counts, axis=-1), np.std(counts, axis=-1)
+        mean_count = np.mean(counts, axis=-1, keepdims=True)
+        std_count = np.std(counts, axis=-1, keepdims=True)
         mask = np.abs(counts - mean_count) < sigma * std_count
-        filtered_counts = counts[mask]
+        filtered_counts = np.where(mask, counts, np.nan)
         return self._compute_chi_squared_red(filtered_counts, return_all=return_all)
 
     def gti_chi_squared(self, time=None, counts=None, gtis=None, return_all=False):

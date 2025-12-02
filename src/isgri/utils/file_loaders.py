@@ -133,11 +133,16 @@ def load_isgri_pif(pif_path, events, pif_threshold=0.5, pif_extension=-1):
             - piffed_events: Filtered events array with PIF mask applied
             - pif: PIF values for filtered events
             - metadata_pif: Dictionary with source info, coding fraction, active modules
+    Raises:
+        ValueError: If PIF file shape is invalid. Usually indicates empty or corrupted file.
 
     """
     with fits.open(pif_path) as hdu:
         pif_file = np.array(hdu[pif_extension].data)
         header = hdu[pif_extension].header
+
+    if pif_file.shape != (134, 130):
+        raise ValueError(f"Invalid PIF file shape: expected (134, 130), got {pif_file.shape}")
 
     metadata_pif = {
         "SWID": header.get("SWID"),
