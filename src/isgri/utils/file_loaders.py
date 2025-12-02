@@ -5,6 +5,20 @@ import os
 
 
 def verify_events_path(path):
+    """
+    Verifies and resolves the events file path.
+
+    Args:
+        path (str): File path or directory path containing events file.
+
+    Returns:
+        str: Resolved path to valid events file.
+
+    Raises:
+        FileNotFoundError: If path doesn't exist, no events file found, or multiple events files found.
+        ValueError: If ISGR-EVTS-ALL extension not found in file.
+
+    """
     if os.path.isfile(path):
         resolved_path = path
     elif os.path.isdir(path):
@@ -27,7 +41,20 @@ def verify_events_path(path):
     return resolved_path
 
 
-def load_events_file(events_path):
+def load_isgri_events(events_path):
+    """
+    Loads ISGRI events from FITS file.
+
+    Args:
+        events_path (str): Path to events file or directory.
+
+    Returns:
+        tuple: (events, gtis, metadata) where:
+            - events: Structured numpy array with TIME, ISGRI_ENERGY, DETY, DETZ fields
+            - gtis: (N, 2) array of Good Time Interval [start, stop] pairs (IJD)
+            - metadata: Dictionary with header info (REVOL, SWID, TSTART, etc.)
+
+    """
     confirmed_path = verify_events_path(events_path)
     with fits.open(confirmed_path) as hdu:
         events = np.array(hdu["ISGR-EVTS-ALL"].data)
@@ -55,6 +82,12 @@ def load_events_file(events_path):
 
 
 def default_pif_metadata():
+    """
+    Creates default PIF metadata dictionary for cases without PIF file.
+
+    Returns:
+        dict: Default PIF metadata with all 8 modules active, no source info.
+    """
     return {
         "SWID": None,
         "SRC_RA": None,
@@ -66,6 +99,17 @@ def default_pif_metadata():
 
 
 def merge_metadata(events_metadata, pif_metadata):
+    """
+    Merges events and PIF metadata dictionaries.
+
+    Args:
+        events_metadata (dict): Metadata from events file.
+        pif_metadata (dict): Metadata from PIF file.
+
+    Returns:
+        dict: Combined metadata (PIF metadata overwrites events metadata except SWID).
+
+    """
     merged_metadata = events_metadata.copy()
     for key in pif_metadata:
         if key == "SWID":
@@ -74,7 +118,23 @@ def merge_metadata(events_metadata, pif_metadata):
     return merged_metadata
 
 
-def load_pif_file(pif_path, events, pif_threshold=0.5, pif_extension=-1):
+def load_isgri_pif(pif_path, events, pif_threshold=0.5, pif_extension=-1):
+    """
+    Loads ISGRI PIF (Pixel Illumination Fraction) file and applies mask to events.
+
+    Args:
+        pif_path (str): Path to PIF FITS file.
+        events (ndarray): Events array from load_isgri_events().
+        pif_threshold (float, optional): PIF threshold value (0-1). Defaults to 0.5.
+        pif_extension (int, optional): PIF file extension index. Defaults to -1.
+
+    Returns:
+        tuple: (piffed_events, pif, metadata_pif) where:
+            - piffed_events: Filtered events array with PIF mask applied
+            - pif: PIF values for filtered events
+            - metadata_pif: Dictionary with source info, coding fraction, active modules
+
+    """
     with fits.open(pif_path) as hdu:
         pif_file = np.array(hdu[pif_extension].data)
         header = hdu[pif_extension].header
@@ -90,5 +150,5 @@ def load_pif_file(pif_path, events, pif_threshold=0.5, pif_extension=-1):
     metadata_pif["No_Modules"] = estimate_active_modules(pif_file)
 
     piffed_events, pif = apply_pif_mask(pif_file, events, pif_threshold)
-    
+
     return piffed_events, pif, metadata_pif
