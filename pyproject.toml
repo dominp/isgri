@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "isgri"
+version = "0.1.0"
+description = "Python package for ISGRI data analysis"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "astropy",
+    "scipy",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
