@@ -2,6 +2,7 @@ from astropy.io import fits
 import numpy as np
 import os
 from .file_loaders import load_isgri_events, load_isgri_pif, default_pif_metadata, merge_metadata
+from .pif import select_isgri_module
 
 
 class LightCurve:
@@ -73,7 +74,7 @@ class LightCurve:
         dety, detz = events["DETY"], events["DETZ"]
         return cls(time, energies, gtis, dety, detz, pif, metadata)
 
-    def rebin(self, binsize, emin=30, emax=300, local_time=True, custom_mask=None):
+    def rebin(self, binsize, emin, emax, local_time=True, custom_mask=None, module_no=None, return_bins=False):
         """
         Rebins the events with the specified bin size and energy range.
 
@@ -97,23 +98,59 @@ class LightCurve:
             time, counts = rebin(100, emin=50, emax=200)
 
         """
-        
+
         mask = (self.energies >= emin) & (self.energies < emax)
-        time = self.load_data if local_time else self.time
+        if module_no:
+            z1, z2, y1, y2 = select_isgri_module(module_no)
+            module_mask = (self.detz >= z1) & (self.detz < z2) & (self.dety >= y1) & (self.dety < y2)
+            mask = mask & module_mask
+        time = self.local_time if local_time else self.time
         time = time[mask]
         pif = self.pif
         pif = pif[mask]
         if custom_mask:
             time = time[custom_mask]
             pif = pif[custom_mask]
-
-        binsize = (0.001 * binsize) / 86400
-        bins = np.arange(self.t0, time[-1] + binsize, binsize)
+        if type(binsize) in [list, np.ndarray]:
+            bins = binsize
+        else:
+            binsize = binsize / 86400
+            bins = np.arange(self.t0, time[-1] + binsize, binsize)
         counts, histbins = np.histogram(time, bins=bins, weights=pif)
         time = np.array(histbins[:-1] + 0.5 * binsize)
+        if return_bins:
+            return time, counts, histbins
         return time, counts
 
-    def cts(self, t1, t2, emin, emax, format="s", bkg=False):
+    def rebin_by_modules(self, binsize, emin, emax, local_time=True, custom_mask=None):
+        """
+        Rebins the events by detector modules with the specified bin size and energy range.
+
+        Args:
+            binsize (float): The bin size in milliseconds.
+            emin (float, optional): The minimum energy value. Defaults to 30.
+            emax (float, optional): The maximum energy value. Defaults to 300.
+            local (bool, optional): If True, the rebinned time values are returned in local time.
+                                   If False, the rebinned time values are returned in IJD time.
+                                   Defaults to True.
+
+            custom_mask (ndarray, optional): A custom time mask to apply before rebinning. Defaults to None.
+        Returns:
+            ndarray: The rebinned time values.
+            ndarray: The rebinned counts for each module.
+        """
+        binsize = binsize / 86400
+        bins = np.arange(self.t0, time[-1] + binsize, binsize)
+        all_counts = []
+        for module_no in range(8):
+            time, counts = self.rebin(
+                binsize, emin, emax, local_time=local_time, custom_mask=custom_mask, module_no=module_no
+            )
+            all_counts.append(counts)
+        all_counts = np.array(all_counts)
+        return time, all_counts
+
+    def cts(self, t1, t2, emin, emax, local_time=True, bkg=False):
         """
         Calculates the counts in the specified time and energy range.
 
@@ -128,11 +165,8 @@ class LightCurve:
             float: The total counts.
 
         """
-        if format == "s":
-            time = self.local_time
-        else:
-            time = self.time
-        return np.sum(self.pif[(time > t1) & (time < t2) & (self.energies > emin) & (self.energies < emax)])
+        time = self.local_time if local_time else self.time
+        return np.sum(self.pif[(time >= t1) & (time < t2) & (self.energies >= emin) & (self.energies < emax)])
 
     def ijd2loc(self, ijd_time):
         """
