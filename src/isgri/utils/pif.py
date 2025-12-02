@@ -1,5 +1,15 @@
 import numpy as np
 
+DETZ_BOUNDS, DETY_BOUNDS = [0, 32, 66, 100, 134], [0, 64, 130]  # Detector module boundaries
+
+
+def select_isgri_module(module_no):
+    col = 0 if module_no % 2 == 0 else 1
+    row = module_no // 2
+    x1, x2 = DETZ_BOUNDS[row], DETZ_BOUNDS[row + 1]
+    y1, y2 = DETY_BOUNDS[col], DETY_BOUNDS[col + 1]
+    return x1, x2, y1, y2
+
 
 def apply_pif_mask(pif_file, events, pif_threshold=0.5):
     pif_filter = pif_file > pif_threshold
@@ -18,14 +28,14 @@ def coding_fraction(pif_file, events):
 
 
 def estimate_active_modules(mask):
-    m, n = [0, 32, 66, 100, 134], [0, 64, 130]  # Separate modules
+    m, n = DETZ_BOUNDS, DETY_BOUNDS  # Separate modules
     mods = []
-    for x1, x2 in zip(m[:-1], m[1:]):
-        for y1, y2 in zip(n[:-1], n[1:]):
-            a = mask[x1:x2, y1:y2].flatten()
-            if len(a[a > 0.01]) / len(a) > 0.2:
-                mods.append(1)
-            else:
-                mods.append(0)
+    for module_no in range(8):
+        x1, x2, y1, y2 = select_isgri_module(module_no)
+        a = mask[x1:x2, y1:y2].flatten()
+        if len(a[a > 0.01]) / len(a) > 0.2:
+            mods.append(1)
+        else:
+            mods.append(0)
     mods = np.array(mods)
     return mods
