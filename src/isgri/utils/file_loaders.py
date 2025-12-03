@@ -94,7 +94,7 @@ def default_pif_metadata():
         "SRC_DEC": None,
         "Source_Name": None,
         "cod": None,
-        "No_Modules": 8,
+        "No_Modules": [1] * 8,
     }
 
 
