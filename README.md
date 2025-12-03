@@ -10,7 +10,7 @@ pip install isgri
 
 Or from source:
 ```bash
-git clone https://github.com/yourusername/isgri.git
+git clone https://github.com/dominp/isgri.git
 cd isgri
 pip install -e .
 ```
@@ -48,5 +48,5 @@ chi = qm.raw_chi_squared()
 
 ## Documentation
 
-- **Tutorial**: See [demo/lightcurve_walkthrough.ipynb](demo/lightcurve_walkthrough.ipynb)
+- **Tutorial**: - **Tutorial**: See [demo notebook](https://github.com/dominp/isgri/blob/main/demo/lightcurve_walkthrough.ipynb) on GitHub
 - **API docs**: All functions have docstrings - use `help(LightCurve)`

@@ -179,7 +179,7 @@ def test_lightcurve_pif_default(mock_events_file):
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     # Without PIF file, all events should have PIF=1
-    assert np.all(lc.pif == 1.0)
+    assert np.all(lc.weights == 1.0)
 
 
 def test_lightcurve_invalid_file():
@@ -200,7 +200,7 @@ def test_lightcurve_rebin_custom_bins(mock_events_file):
     """Test rebinning with custom bin edges."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
-    custom_bins = [0, 10, 25, 50, 100] # seconds
+    custom_bins = [0, 10, 25, 50, 100]  # seconds
     time, counts = lc.rebin(binsize=custom_bins, emin=30, emax=300)
 
     assert len(time) == len(custom_bins) - 1
@@ -212,8 +212,7 @@ def test_lightcurve_rebin_with_custom_mask(mock_events_file):
     """Test rebinning with custom event mask."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
-    
-    custom_mask = np.ones(len(lc.time), dtype=bool) # exclude first half of events
+    custom_mask = np.ones(len(lc.time), dtype=bool)  # exclude first half of events
     custom_mask[: len(lc.time) // 2] = False
 
     time_masked, counts_masked = lc.rebin(binsize=1.0, emin=30, emax=300, custom_mask=custom_mask)

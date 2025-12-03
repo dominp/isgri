@@ -29,7 +29,7 @@ class LightCurve:
         loc2ijd: Converts local time to IJD time.
     """
 
-    def __init__(self, time, energies, gtis, dety, detz, pif, metadata):
+    def __init__(self, time, energies, gtis, dety, detz, weights, metadata):
         """
         Initialize LightCurve instance.
 
@@ -50,7 +50,7 @@ class LightCurve:
 
         self.dety = dety
         self.detz = detz
-        self.pif = pif
+        self.weights = weights
         self.metadata = metadata
 
     @classmethod
@@ -71,16 +71,16 @@ class LightCurve:
         """
         events, gtis, metadata = load_isgri_events(events_path)
         if pif_path:
-            events, pif, metadata_pif = load_isgri_pif(pif_path, events, pif_threshold, pif_extension)
+            events, weights, metadata_pif = load_isgri_pif(pif_path, events, pif_threshold, pif_extension)
         else:
-            pif = np.ones(len(events))
+            weights = np.ones(len(events))
             metadata_pif = default_pif_metadata()
 
         metadata = merge_metadata(metadata, metadata_pif)
         time = events["TIME"]
         energies = events["ISGRI_ENERGY"]
         dety, detz = events["DETY"], events["DETZ"]
-        return cls(time, energies, gtis, dety, detz, pif, metadata)
+        return cls(time, energies, gtis, dety, detz, weights, metadata)
 
     def rebin(self, binsize, emin, emax, local_time=True, custom_mask=None):
         """
@@ -116,10 +116,10 @@ class LightCurve:
         # Apply filters
         mask = self._create_event_mask(emin, emax, custom_mask)
         time_filtered = time[mask]
-        pif_filtered = self.pif[mask]
+        weights_filtered = self.weights[mask]
 
         # Histogram
-        counts, bin_edges = np.histogram(time_filtered, bins=bins, weights=pif_filtered)
+        counts, bin_edges = np.histogram(time_filtered, bins=bins, weights=weights_filtered)
         time_centers = bin_edges[:-1] + 0.5 * binsize_actual
 
         return time_centers, counts
@@ -208,7 +208,7 @@ class LightCurve:
         time_filtered = time[energy_mask]
         dety_filtered = self.dety[energy_mask]
         detz_filtered = self.detz[energy_mask]
-        pif_filtered = self.pif[energy_mask]
+        weights_filtered = self.weights[energy_mask]
 
         # Compute module indices using digitize
         dety_bin = np.digitize(dety_filtered, DETY_BOUNDS) - 1  # 0 or 1
@@ -218,7 +218,7 @@ class LightCurve:
         counts = []
         for i in range(8):
             mask = module_idx == i
-            counts.append(np.histogram(time_filtered[mask], bins=bins, weights=pif_filtered[mask])[0])
+            counts.append(np.histogram(time_filtered[mask], bins=bins, weights=weights_filtered[mask])[0])
 
         return times, counts
 
@@ -238,7 +238,7 @@ class LightCurve:
             float: The total counts in the specified range.
         """
         time = self.local_time if local_time else self.time
-        return np.sum(self.pif[(time >= t1) & (time < t2) & (self.energies >= emin) & (self.energies < emax)])
+        return np.sum(self.weights[(time >= t1) & (time < t2) & (self.energies >= emin) & (self.energies < emax)])
 
     def ijd2loc(self, ijd_time):
         """
