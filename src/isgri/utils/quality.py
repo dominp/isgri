@@ -62,7 +62,7 @@ class QualityMetrics:
         time, counts = self.lightcurve.rebin_by_modules(
             binsize=self.binsize, emin=self.emin, emax=self.emax, local_time=self.local_time
         )
-        module_data = {"time": time, "counts": counts}
+        module_data = {"time": time, "counts": np.asarray(counts)}
         self.module_data = module_data
         return module_data
 
@@ -71,20 +71,36 @@ class QualityMetrics:
         Compute reduced chi-squared for count data.
 
         Args:
-            counts (ndarray): Count array(s) to analyze.
-            return_all (bool, optional): If True, returns chi-squared for each array. If False, returns mean. Defaults to False.
+            counts (ndarray): Count array(s) to analyze. Shape: (n_modules, n_bins) or (n_bins,)
+            return_all (bool, optional): If True, returns detailed results. If False, returns weighted mean. Defaults to False.
 
         Returns:
-            float or ndarray: Reduced chi-squared value(s).
+            If return_all=False:
+                float: Weighted mean chi-squared (weighted by total counts per module)
+            If return_all=True:
+                tuple: (chi_squared, dof, no_counts) where:
+                    - chi_squared: Raw chi-squared values per module
+                    - dof: Degrees of freedom per module (n_bins - 1 excluding NaN)
+                    - no_counts: Total counts per module
         """
         counts = np.asarray(counts)
         counts = np.where(counts == 0, np.nan, counts)
         mean_counts = np.nanmean(counts, axis=-1, keepdims=True)
         chi_squared = np.nansum((counts - mean_counts) ** 2 / mean_counts, axis=-1)
-        dof = counts.shape[-1] - 1
+
+        # DOF = number of non-empty bins minus 1
+        nan_mask = ~np.isnan(counts)
+        dof = np.sum(nan_mask, axis=-1) - 1
+        no_counts = np.nansum(counts, axis=-1)
+
         if return_all:
-            return chi_squared / dof
-        return np.nanmean(chi_squared / dof)
+            return chi_squared, dof, no_counts
+
+        if np.sum(no_counts) == 0 or np.all(dof <= 0):
+            return np.nan
+        
+        # Weight by total counts per module
+        return np.average(chi_squared / dof, weights=no_counts)
 
     def raw_chi_squared(self, counts=None, return_all=False):
         """
