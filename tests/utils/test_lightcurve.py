@@ -219,3 +219,70 @@ def test_lightcurve_rebin_with_custom_mask(mock_events_file):
     time_full, counts_full = lc.rebin(binsize=1.0, emin=30, emax=300)
 
     assert np.sum(counts_masked) < np.sum(counts_full)
+
+
+def test_lightcurve_module_assignment():
+    """Test that events are correctly assigned to detector modules."""
+    # Create synthetic events with DIFFERENT counts per module to verify assignment
+    module_counts_expected = [10, 25, 50, 75, 100, 125, 150, 200]  # Different for each module
+    n_events = sum(module_counts_expected)
+
+    events = np.zeros(
+        n_events,
+        dtype=[
+            ("TIME", "f8"),
+            ("ISGRI_ENERGY", "f4"),
+            ("DETY", "i2"),
+            ("DETZ", "i2"),
+            ("SELECT_FLAG", "i2"),
+        ],
+    )
+
+    # Module layout: 0 1
+    #                2 3
+    #                4 5
+    #                6 7
+    module_positions = [
+        (16, 32),  # Module 0: DETZ [0-32),   DETY [0-64)
+        (16, 96),  # Module 1: DETZ [0-32),   DETY [64-130)
+        (48, 32),  # Module 2: DETZ [32-66),  DETY [0-64)
+        (48, 96),  # Module 3: DETZ [32-66),  DETY [64-130)
+        (80, 32),  # Module 4: DETZ [66-100), DETY [0-64)
+        (80, 96),  # Module 5: DETZ [66-100), DETY [64-130)
+        (116, 32),  # Module 6: DETZ [100-134), DETY [0-64)
+        (116, 96),  # Module 7: DETZ [100-134), DETY [64-130)
+    ]
+
+    idx = 0
+    for module_no, (detz, dety) in enumerate(module_positions):
+        n_events_module = module_counts_expected[module_no]
+
+        events["DETZ"][idx : idx + n_events_module] = detz
+        events["DETY"][idx : idx + n_events_module] = dety
+        events["TIME"][idx : idx + n_events_module] = np.linspace(0, 10 / 86400, n_events_module)
+        events["ISGRI_ENERGY"][idx : idx + n_events_module] = 100  # All same energy
+        events["SELECT_FLAG"][idx : idx + n_events_module] = 0
+
+        idx += n_events_module
+
+    # Create LightCurve
+    time = events["TIME"]
+    energies = events["ISGRI_ENERGY"]
+    dety = events["DETY"]
+    detz = events["DETZ"]
+    gtis = np.array([[time[0], time[-1]]])
+    weights = np.ones(n_events)
+    metadata = {}
+
+    lc = LightCurve(time, energies, gtis, dety, detz, weights, metadata)
+
+    # Rebin by modules (1 bin covering all time)
+    times, counts = lc.rebin_by_modules(binsize=20.0, emin=50, emax=200, local_time=True)
+
+    # Verify each module has the expected count
+    for module_no, expected_count in enumerate(module_counts_expected):
+        actual_count = counts[module_no][0]
+        assert actual_count == expected_count, (
+            f"Module {module_no} at position {module_positions[module_no]}: "
+            f"expected {expected_count} counts, got {actual_count}"
+        )
