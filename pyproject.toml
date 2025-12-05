@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "isgri"
-version = "0.2.0"
+version = "0.3.0"
 authors = [{name = "Dominik Patryk Pacholski"}]
 license = {text = "MIT"}
 description = "Python package for INTEGRAL IBIS/ISGRI lightcurve analysis"
