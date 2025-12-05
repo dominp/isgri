@@ -49,7 +49,7 @@ def test_compute_counts_without_lightcurve():
     """Test _compute_counts raises error when lightcurve is None."""
     qm = QualityMetrics()
 
-    with pytest.raises(ValueError, match="Lightcurve is not set"):
+    with pytest.raises(ValueError, match="Lightcurve must be set before computing counts"):
         qm._compute_counts()
 
 

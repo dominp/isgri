@@ -35,6 +35,13 @@ class ScwQuery:
     >>>
     >>> # FOV-based filtering
     >>> results = query.position(ra=83.63, dec=22.01, fov_mode="full").get()
+
+    See Also
+    --------
+    time : Filter by time range
+    quality : Filter by data quality
+    position : Filter by sky position
+    revolution : Filter by revolution number
     """
 
     ISGRI_FULLY_CODED = 4.0  # half-width in degrees (8x8 total)
@@ -87,6 +94,12 @@ class ScwQuery:
         -------
         ScwQuery
             Self for method chaining
+
+        Examples
+        --------
+        >>> query.time(tstart="2010-01-01", tstop="2010-12-31")
+        >>> query.time(tstart=3000.0)  # IJD format
+        >>> query.time(tstop="2015-01-01")  # Only upper bound
         """
         mask = np.ones(len(self.catalog), dtype=bool)
 
@@ -116,6 +129,12 @@ class ScwQuery:
         -------
         ScwQuery
             Self for method chaining
+
+        Examples
+        --------
+        >>> query.quality(max_chi=2.0)  # High quality data
+        >>> query.quality(max_chi=5.0, chi_type="CUT_CHI")  # Alternative metric
+
         """
         if chi_type not in self.catalog.colnames:
             raise ValueError(f"Column {chi_type} not found in catalog")
@@ -181,6 +200,18 @@ class ScwQuery:
                 return self
             target = self._parse_position(ra, dec)
 
+        if isinstance(ra, (int, float)) and not (0 <= ra < 360):
+            raise ValueError(f"RA must be in [0, 360), got {ra}")
+    
+        if isinstance(dec, (int, float)) and not (-90 <= dec <= 90):
+            raise ValueError(f"Dec must be in [-90, 90], got {dec}")
+        
+        if radius is not None and radius <= 0:
+            raise ValueError("radius must be positive")
+        
+        if fov_mode is not None and fov_mode not in ['full', 'any']:
+            raise ValueError(f"Invalid fov_mode: {fov_mode}. Use 'full' or 'any'")
+
         mask = np.ones(len(self.catalog), dtype=bool)
 
         if fov_mode is not None or max_offset is not None:
@@ -221,9 +252,6 @@ class ScwQuery:
                     "z_offset": z_off,
                     "max_offset_actual": max_off,
                 }
-
-            else:
-                raise ValueError(f"Invalid fov_mode: {fov_mode}. Use 'full' or 'any'")
 
         else:
             pointings_x = SkyCoord(self.catalog["RA_SCX"], self.catalog["DEC_SCX"], unit="deg")
@@ -294,6 +322,15 @@ class ScwQuery:
         -------
         Table
             Filtered catalog as astropy Table
+
+        Notes
+        -----
+        This is typically the final call in a filter chain:
+
+        Examples
+        --------
+        >>> results = query.time(tstart=3000).quality(max_chi=2.0).get()
+        >>> print(len(results))
         """
         combined_mask = self.mask.copy()
         for filt in self._filters:
@@ -308,6 +345,12 @@ class ScwQuery:
         -------
         int
             Number of matching SCWs
+
+        Examples
+        --------
+        >>> query.time(tstart=3000).count()
+        150
+        >>> # Faster than len(query.get()) for large catalogs
         """
         return len(self.get())
 
@@ -319,6 +362,12 @@ class ScwQuery:
         -------
         ScwQuery
             Self for method chaining
+
+        Examples
+        --------
+        >>> query.time(tstart=3000).get()  # First query
+        >>> query.reset()  # Clear filters
+        >>> query.quality(max_chi=2.0).get()  # New query
         """
         self._filters.clear()
         self._mask = None

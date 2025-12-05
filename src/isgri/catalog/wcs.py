@@ -6,6 +6,8 @@ Implements spherical coordinate rotations following Calabretta & Greisen (2002),
 https://doi.org/10.1051/0004-6361:20021327
 """
 
+from typing import Union
+import numpy.typing as npt
 import numpy as np
 
 
@@ -132,7 +134,7 @@ def native_to_celestial(phi, theta, crval, longpole=180.0):
 
     x, y, z = spherical_to_cartesian(phi, theta)
 
-    R = rotation_matrix(alpha_p, delta_p, phi_p).T # Transpose for inverse rotation
+    R = rotation_matrix(alpha_p, delta_p, phi_p).T  # Transpose for inverse rotation
     x_rot = R[0, 0] * x + R[0, 1] * y + R[0, 2] * z
     y_rot = R[1, 0] * x + R[1, 1] * y + R[1, 2] * z
     z_rot = R[2, 0] * x + R[2, 1] * y + R[2, 2] * z
@@ -142,7 +144,14 @@ def native_to_celestial(phi, theta, crval, longpole=180.0):
     return lon, lat
 
 
-def compute_detector_offset(src_ra, src_dec, pointing_ra, pointing_dec, z_ra, z_dec):
+def compute_detector_offset(
+    src_ra: Union[float, npt.ArrayLike],
+    src_dec: Union[float, npt.ArrayLike],
+    pointing_ra: float,
+    pointing_dec: float,
+    z_ra: float,
+    z_dec: float,
+) -> tuple[Union[float, np.ndarray], Union[float, np.ndarray]]:
     """
     Compute source offset in INTEGRAL detector coordinates.
 
