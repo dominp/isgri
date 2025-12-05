@@ -1,12 +1,12 @@
 from astropy.time import Time
 
 
-def ijd2utc(t):
+def ijd2utc(ijd_time):
     """
     Converts IJD (INTEGRAL Julian Date) time to UTC ISO format.
 
     Args:
-        t (float or ndarray): IJD time value(s).
+        ijd_time (float or ndarray): IJD time value(s).
 
     Returns:
         str or ndarray: UTC time in ISO format (YYYY-MM-DD HH:MM:SS.sss).
@@ -17,15 +17,15 @@ def ijd2utc(t):
         >>> ijd2utc(1000.5)
         '2002-09-27 11:58:55.816'
     """
-    return Time(t + 51544, format="mjd", scale="tt").utc.iso
+    return Time(ijd_time + 51544, format="mjd", scale="tt").utc.iso
 
 
-def utc2ijd(t):
+def utc2ijd(utc_time):
     """
     Converts UTC ISO format time to IJD (INTEGRAL Julian Date).
 
     Args:
-        t (str or ndarray): UTC time in ISO format (YYYY-MM-DD HH:MM:SS).
+        utc_time (str or ndarray): UTC time in ISO format (YYYY-MM-DD HH:MM:SS).
 
     Returns:
         float or ndarray: IJD time value(s).
@@ -36,4 +36,6 @@ def utc2ijd(t):
         >>> utc2ijd('2002-09-27 00:00:00')
         1000.0
     """
-    return Time(t, format="iso", scale="utc").tt.mjd - 51544
+    if isinstance(utc_time, str):
+        utc_time = utc_time.replace("T", " ")
+    return Time(utc_time, format="iso", scale="utc").tt.mjd - 51544
