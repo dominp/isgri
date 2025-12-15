@@ -8,10 +8,24 @@ from .config import Config
 @click.group()
 @click.version_option(version=__version__)
 def main():
+    """ISGRI - INTEGRAL/ISGRI data analysis toolkit."""
     pass
 
 
 def parse_time(time_str):
+    """
+    Parse time string as IJD float or ISO date string.
+
+    Parameters
+    ----------
+    time_str : str or None
+        Time as "YYYY-MM-DD" or IJD number
+
+    Returns
+    -------
+    float or str or None
+        Parsed time value
+    """
     if time_str is None:
         return None
 
@@ -35,6 +49,41 @@ def parse_time(time_str):
 @click.option("--list-swids", is_flag=True, help="Only output SWID list")
 @click.option("--count", is_flag=True, help="Only show count")
 def query(catalog, tstart, tstop, ra, dec, fov, max_chi, chi_type, revolution, output, list_swids, count):
+    """
+    Query INTEGRAL science window catalog.
+
+    If no catalog path is provided, uses the default from configuration.
+    Multiple filters can be combined.
+
+    Examples:
+        Query by time range (IJD):
+
+            isgri query --tstart 3000 --tstop 3100
+
+        Query by time range (ISO date):
+
+            isgri query --tstart 2010-01-01 --tstop 2010-12-31
+
+        Query by sky position:
+
+            isgri query --ra 83.63 --dec 22.01 --fov full
+
+        Query with quality cut:
+
+            isgri query --max-chi 2.0 --chi-type CUT
+
+        Save results to file:
+
+            isgri query --tstart 3000 --tstop 3100 --output results.fits
+
+        Get only SWID list:
+
+            isgri query --tstart 3000 --tstop 3100 --list-swids
+
+        Count matching science windows:
+
+            isgri query --ra 83.63 --dec 22.01 --count
+    """
     try:
         # Load catalog
         q = ScwQuery(catalog)
@@ -54,7 +103,11 @@ def query(catalog, tstart, tstop, ra, dec, fov, max_chi, chi_type, revolution, o
         if max_chi is not None:
             q = q.quality(max_chi=max_chi, chi_type=chi_type)
 
+        if revolution:
+            q = q.revolution(revolution)
+
         results = q.get()
+
         if count:
             click.echo(len(results))
 
@@ -73,8 +126,9 @@ def query(catalog, tstart, tstop, ra, dec, fov, max_chi, chi_type, revolution, o
             click.echo(f"Found {len(results)}/{initial_count} SCWs")
             if len(results) > 0:
                 display_cols = ["SWID", "TSTART", "TSTOP", "RA_SCX", "DEC_SCX"]
-                if "CHI" in results.colnames:
-                    display_cols.append("CHI")
+                chi_col = f"{chi_type}_CHI" if chi_type != "RAW" else "CHI"
+                if chi_col in results.colnames:
+                    display_cols.append(chi_col)
                 click.echo(results[display_cols][:10])
                 if len(results) > 10:
                     click.echo(f"... and {len(results) - 10} more")
@@ -86,7 +140,12 @@ def query(catalog, tstart, tstop, ra, dec, fov, max_chi, chi_type, revolution, o
 
 @main.command()
 def config():
-    """Show current configuration."""
+    """
+    Show current configuration.
+
+    Displays paths to config file, archive directory, and catalog file,
+    along with their existence status.
+    """
     cfg = Config()
 
     click.echo(f"Config file: {cfg.path}")
@@ -115,13 +174,23 @@ def config_set(archive, catalog):
     """
     Set configuration values.
 
+    Set default paths for archive directory and/or catalog file.
+    Paths are expanded (~ becomes home directory) and resolved to absolute paths.
+    Warns if path doesn't exist but allows setting anyway.
+
     Examples:
 
-        isgri config-set --archive /anita/archivio/
+        Set archive path:
 
-        isgri config-set --catalog ~/data/catalog.fits
+            isgri config-set --archive /anita/archivio/
 
-        isgri config-set --archive /anita/archivio/ --catalog ~/data/catalog.fits
+        Set catalog path:
+
+            isgri config-set --catalog ~/data/scw_catalog.fits
+
+        Set both at once:
+
+            isgri config-set --archive /anita/archivio/ --catalog ~/data/scw_catalog.fits
     """
     if not archive and not catalog:
         click.echo("Error: Specify at least one option (--archive or --catalog)", err=True)
@@ -136,7 +205,7 @@ def config_set(archive, catalog):
             if not click.confirm("Set anyway?"):
                 raise click.Abort()
         cfg.set(archive_path=archive_path)
-        click.echo(f"Archive path set to: {archive_path}")
+        click.echo(f"✓ Archive path set to: {archive_path}")
 
     if catalog:
         catalog_path = Path(catalog).expanduser().resolve()
@@ -145,7 +214,7 @@ def config_set(archive, catalog):
             if not click.confirm("Set anyway?"):
                 raise click.Abort()
         cfg.set(catalog_path=catalog_path)
-        click.echo(f"Catalog path set to: {catalog_path}")
+        click.echo(f"✓ Catalog path set to: {catalog_path}")
 
     click.echo()
     click.echo(f"Configuration saved to: {cfg.path}")
