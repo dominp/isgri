@@ -2,6 +2,7 @@ import click
 from pathlib import Path
 from .catalog import ScwQuery
 from .__version__ import __version__
+from .config import Config
 
 
 @click.group()
@@ -21,15 +22,15 @@ def parse_time(time_str):
 
 
 @main.command()
-@click.argument("catalog", type=click.Path(exists=True))
+@click.option("--catalog", type=click.Path(), help="Path to catalog FITS file. If not provided, uses config value.")
 @click.option("--tstart", help="Start time (YYYY-MM-DD or IJD)")
 @click.option("--tstop", help="Stop time (YYYY-MM-DD or IJD)")
 @click.option("--ra", type=float, help="Right ascension (degrees)")
 @click.option("--dec", type=float, help="Declination (degrees)")
 @click.option("--fov", type=click.Choice(["full", "any"]), default="any", help="Field of view mode")
 @click.option("--max-chi", type=float, help="Maximum chi-squared value")
-@click.option('--chi-type', type=click.Choice(['RAW','CUT','GTI']), default='CUT',help="Type of chi-squared value")
-@click.option("--revolution", type=click.Choice(['']) "-r", help="Revolution number")
+@click.option("--chi-type", type=click.Choice(["RAW", "CUT", "GTI"]), default="CUT", help="Type of chi-squared value")
+@click.option("--revolution", "-r", help="Revolution number")
 @click.option("--output", "-o", type=click.Path(), help="Output file (.fits or .csv)")
 @click.option("--list-swids", is_flag=True, help="Only output SWID list")
 @click.option("--count", is_flag=True, help="Only show count")
@@ -81,6 +82,73 @@ def query(catalog, tstart, tstop, ra, dec, fov, max_chi, chi_type, revolution, o
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         raise click.Abort()
+
+
+@main.command()
+def config():
+    """Show current configuration."""
+    cfg = Config()
+
+    click.echo(f"Config file: {cfg.path}")
+    click.echo(f"  Exists: {cfg.path.exists()}")
+    click.echo()
+
+    archive = cfg.archive_path
+    click.echo(f"Archive path: {archive if archive else '(not set)'}")
+    if archive:
+        click.echo(f"  Exists: {archive.exists()}")
+
+    try:
+        catalog = cfg.catalog_path
+        click.echo(f"Catalog path: {catalog if catalog else '(not set)'}")
+        if catalog:
+            click.echo(f"  Exists: {catalog.exists()}")
+    except FileNotFoundError as e:
+        click.echo(f"Catalog path: (configured but file not found)")
+        click.echo(f"  Error: {e}")
+
+
+@main.command()
+@click.option("--archive", type=click.Path(), help="INTEGRAL archive directory path")
+@click.option("--catalog", type=click.Path(), help="Catalog FITS file path")
+def config_set(archive, catalog):
+    """
+    Set configuration values.
+
+    Examples:
+
+        isgri config-set --archive /anita/archivio/
+
+        isgri config-set --catalog ~/data/catalog.fits
+
+        isgri config-set --archive /anita/archivio/ --catalog ~/data/catalog.fits
+    """
+    if not archive and not catalog:
+        click.echo("Error: Specify at least one option (--archive or --catalog)", err=True)
+        raise click.Abort()
+
+    cfg = Config()
+
+    if archive:
+        archive_path = Path(archive).expanduser().resolve()
+        if not archive_path.exists():
+            click.echo(f"Warning: Archive path does not exist: {archive_path}", err=True)
+            if not click.confirm("Set anyway?"):
+                raise click.Abort()
+        cfg.set(archive_path=archive_path)
+        click.echo(f"Archive path set to: {archive_path}")
+
+    if catalog:
+        catalog_path = Path(catalog).expanduser().resolve()
+        if not catalog_path.exists():
+            click.echo(f"Warning: Catalog file does not exist: {catalog_path}", err=True)
+            if not click.confirm("Set anyway?"):
+                raise click.Abort()
+        cfg.set(catalog_path=catalog_path)
+        click.echo(f"Catalog path set to: {catalog_path}")
+
+    click.echo()
+    click.echo(f"Configuration saved to: {cfg.path}")
 
 
 if __name__ == "__main__":
