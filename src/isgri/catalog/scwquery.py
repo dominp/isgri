@@ -53,7 +53,7 @@ class ScwQuery:
             cfg = Config()
             catalog_path = cfg.catalog_path
             if catalog_path is None:
-                raise ValueError("No catalog_path provided and no summary_path in config")
+                raise ValueError("No catalog_path provided and no catalog_path in config")
 
         self.catalog_path = Path(catalog_path)
         self._catalog: Optional[Table] = None
