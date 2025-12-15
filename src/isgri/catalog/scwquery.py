@@ -8,6 +8,7 @@ from typing import Optional, Union, Literal
 from dataclasses import dataclass
 from isgri.utils import ijd2utc, utc2ijd
 from .wcs import compute_detector_offset
+from ..config import Config
 
 
 @dataclass
@@ -47,7 +48,13 @@ class ScwQuery:
     ISGRI_FULLY_CODED = 4.0  # half-width in degrees (8x8 total)
     ISGRI_DETECTOR_EDGE = 14.5  # half-width in degrees (29x29 total)
 
-    def __init__(self, catalog_path: Union[str, Path]):
+    def __init__(self, catalog_path: Optional[Union[str, Path]] = None):
+        if catalog_path is None:
+            cfg = Config()
+            catalog_path = cfg.summary_path
+            if catalog_path is None:
+                raise ValueError("No catalog_path provided and no summary_path in config")
+
         self.catalog_path = Path(catalog_path)
         self._catalog: Optional[Table] = None
         self._mask: Optional[np.ndarray] = None
@@ -202,14 +209,14 @@ class ScwQuery:
 
         if isinstance(ra, (int, float)) and not (0 <= ra < 360):
             raise ValueError(f"RA must be in [0, 360), got {ra}")
-    
+
         if isinstance(dec, (int, float)) and not (-90 <= dec <= 90):
             raise ValueError(f"Dec must be in [-90, 90], got {dec}")
-        
+
         if radius is not None and radius <= 0:
             raise ValueError("radius must be positive")
-        
-        if fov_mode is not None and fov_mode not in ['full', 'any']:
+
+        if fov_mode is not None and fov_mode not in ["full", "any"]:
             raise ValueError(f"Invalid fov_mode: {fov_mode}. Use 'full' or 'any'")
 
         mask = np.ones(len(self.catalog), dtype=bool)
