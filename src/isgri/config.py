@@ -15,7 +15,7 @@ class Config:
     """
     Configuration manager for ISGRI.
 
-    Manages paths to archive directory and summary catalog. Config is stored
+    Manages paths to archive directory and catalog. Config is stored
     in platform-specific location (~/.config/isgri/config.toml on Linux).
     Falls back to local isgri_config.toml if global config doesn't exist.
 
@@ -30,8 +30,8 @@ class Config:
         Path to config file
     archive_path : Path or None
         Path to INTEGRAL archive directory
-    summary_path : Path or None
-        Path to summary catalog FITS file (validated on access)
+    catalog_path : Path or None
+        Path to catalog FITS file (validated on access)
     """
 
     DEFAULT_PATH = Path(user_config_dir("isgri")) / "config.toml"
@@ -83,26 +83,26 @@ class Config:
         return None
 
     @property
-    def summary_path(self) -> Optional[Path]:
+    def catalog_path(self) -> Optional[Path]:
         """
-        Get summary catalog path from config.
+        Get catalog path from config.
 
         Returns
         -------
         Path or None
-            Path to summary FITS file
+            Path to catalog FITS file
 
         Raises
         ------
         FileNotFoundError
             If configured path doesn't exist
         """
-        path_str = self.config.get("summary_path")
+        path_str = self.config.get("catalog_path")
         if not path_str:
             return None
         path = Path(path_str)
         if not path.exists():
-            raise FileNotFoundError(f"Summary path does not exist: {path}")
+            raise FileNotFoundError(f"Catalog path does not exist: {path}")
         return path
 
     def save(self):
@@ -111,7 +111,7 @@ class Config:
         with open(self.path, "wb") as f:
             tomli_w.dump(self._config or {}, f)
 
-    def create_new(self, archive_path: Optional[Path] = None, summary_path: Optional[Path] = None):
+    def create_new(self, archive_path: Optional[Path] = None, catalog_path: Optional[Path] = None):
         """
         Create new config file with given paths.
 
@@ -119,17 +119,17 @@ class Config:
         ----------
         archive_path : Path, optional
             Path to archive directory
-        summary_path : Path, optional
-            Path to summary catalog FITS file
+        catalog_path : Path, optional
+            Path to catalog FITS file
         """
         self._config = {}
         if archive_path:
             self._config["archive_path"] = str(archive_path)
-        if summary_path:
-            self._config["summary_path"] = str(summary_path)
+        if catalog_path:
+            self._config["catalog_path"] = str(catalog_path)
         self.save()
 
-    def set(self, archive_path: Optional[Path] = None, summary_path: Optional[Path] = None):
+    def set(self, archive_path: Optional[Path] = None, catalog_path: Optional[Path] = None):
         """
         Update config paths and save.
 
@@ -137,15 +137,15 @@ class Config:
         ----------
         archive_path : Path, optional
             New archive directory path
-        summary_path : Path, optional
-            New summary catalog path
+        catalog_path : Path, optional
+            New catalog path
         """
         if archive_path:
             self.config["archive_path"] = str(archive_path)
-        if summary_path:
-            self.config["summary_path"] = str(summary_path)
+        if catalog_path:
+            self.config["catalog_path"] = str(catalog_path)
 
         self.save()
 
     def __repr__(self):
-        return f"Config(path={self.path}, archive={self.archive_path}, summary={self.summary_path})"
+        return f"Config(path={self.path}, archive={self.archive_path}, catalog={self.catalog_path})"

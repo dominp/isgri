@@ -20,11 +20,11 @@ def temp_archive(tmp_path):
 
 
 @pytest.fixture
-def temp_summary(tmp_path):
-    """Create temporary summary file."""
-    summary = tmp_path / "summary.fits"
-    summary.touch()
-    return summary
+def temp_catalog(tmp_path):
+    """Create temporary catalog file."""
+    catalog = tmp_path / "catalog.fits"
+    catalog.touch()
+    return catalog
 
 
 def test_config_init_default():
@@ -45,35 +45,35 @@ def test_config_empty():
     """Test empty config returns None for paths."""
     cfg = Config(Path("/tmp/nonexistent_config.toml"))
     assert cfg.archive_path is None
-    assert cfg.summary_path is None
+    assert cfg.catalog_path is None
 
 
-def test_create_new_config(temp_config_dir, temp_archive, temp_summary):
+def test_create_new_config(temp_config_dir, temp_archive, temp_catalog):
     """Test creating new config."""
     config_path = temp_config_dir / "test.toml"
     cfg = Config(config_path)
 
-    cfg.create_new(archive_path=temp_archive, summary_path=temp_summary)
+    cfg.create_new(archive_path=temp_archive, catalog_path=temp_catalog)
 
     assert config_path.exists()
     assert cfg.archive_path == temp_archive
-    assert cfg.summary_path == temp_summary
+    assert cfg.catalog_path == temp_catalog
 
 
-def test_set_paths(temp_config_dir, temp_archive, temp_summary):
+def test_set_paths(temp_config_dir, temp_archive, temp_catalog):
     """Test setting paths with set() method."""
     config_path = temp_config_dir / "test.toml"
     cfg = Config(config_path)
 
-    cfg.set(archive_path=temp_archive, summary_path=temp_summary)
+    cfg.set(archive_path=temp_archive, catalog_path=temp_catalog)
 
     assert cfg.archive_path == temp_archive
-    assert cfg.summary_path == temp_summary
+    assert cfg.catalog_path == temp_catalog
 
     # Reload and verify persistence
     cfg2 = Config(config_path)
     assert cfg2.archive_path == temp_archive
-    assert cfg2.summary_path == temp_summary
+    assert cfg2.catalog_path == temp_catalog
 
 
 def test_set_archive_only(temp_config_dir, temp_archive):
@@ -84,31 +84,31 @@ def test_set_archive_only(temp_config_dir, temp_archive):
     cfg.set(archive_path=temp_archive)
 
     assert cfg.archive_path == temp_archive
-    assert cfg.summary_path is None
+    assert cfg.catalog_path is None
 
 
-def test_set_summary_only(temp_config_dir, temp_summary):
-    """Test setting only summary path."""
+def test_set_catalog_only(temp_config_dir, temp_catalog):
+    """Test setting only catalog path."""
     config_path = temp_config_dir / "test.toml"
     cfg = Config(config_path)
 
-    cfg.set(summary_path=temp_summary)
+    cfg.set(catalog_path=temp_catalog)
 
-    assert cfg.summary_path == temp_summary
+    assert cfg.catalog_path == temp_catalog
     assert cfg.archive_path is None
 
 
-def test_summary_path_not_exists(temp_config_dir):
-    """Test summary_path raises error if file doesn't exist."""
+def test_catalog_path_not_exists(temp_config_dir):
+    """Test catalog_path raises error if file doesn't exist."""
     config_path = temp_config_dir / "test.toml"
     cfg = Config(config_path)
 
     # Set non-existent path
-    cfg.set(summary_path=Path("/tmp/nonexistent.fits"))
+    cfg.set(catalog_path=Path("/tmp/nonexistent.fits"))
 
     # Should raise when accessing property
-    with pytest.raises(FileNotFoundError, match="Summary path does not exist"):
-        _ = cfg.summary_path
+    with pytest.raises(FileNotFoundError, match="Catalog path does not exist"):
+        _ = cfg.catalog_path
 
 
 def test_archive_path_not_exists(temp_config_dir):
@@ -123,17 +123,14 @@ def test_archive_path_not_exists(temp_config_dir):
     assert cfg.archive_path == nonexistent
 
 
-def test_config_repr(temp_config_dir, temp_archive, temp_summary):
+def test_config_repr(temp_config_dir, temp_archive, temp_catalog):
     """Test config string representation."""
     config_path = temp_config_dir / "test.toml"
     cfg = Config(config_path)
-    cfg.create_new(archive_path=temp_archive, summary_path=temp_summary)
+    cfg.create_new(archive_path=temp_archive, catalog_path=temp_catalog)
 
     repr_str = repr(cfg)
     assert "Config(" in repr_str
     assert str(config_path) in repr_str
     assert str(temp_archive) in repr_str
-    assert str(temp_summary) in repr_str
-
-
-
+    assert str(temp_catalog) in repr_str

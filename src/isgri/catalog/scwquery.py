@@ -51,7 +51,7 @@ class ScwQuery:
     def __init__(self, catalog_path: Optional[Union[str, Path]] = None):
         if catalog_path is None:
             cfg = Config()
-            catalog_path = cfg.summary_path
+            catalog_path = cfg.catalog_path
             if catalog_path is None:
                 raise ValueError("No catalog_path provided and no summary_path in config")
 
