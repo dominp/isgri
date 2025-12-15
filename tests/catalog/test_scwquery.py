@@ -130,7 +130,7 @@ def test_quality_filter_max_chi(mock_catalog):
 def test_quality_filter_different_column(mock_catalog):
     """Test quality filtering with different chi column"""
     query = ScwQuery(mock_catalog)
-
+    print(query.catalog.colnames)
     results = query.quality(max_chi=2.0, chi_type="CUT_CHI").get()
 
     assert all(results["CUT_CHI"] <= 2.0)
@@ -363,3 +363,84 @@ def test_filter_dataclass():
     assert filt.name == "test"
     assert np.array_equal(filt.mask, mask)
     assert filt.params == params
+
+
+import pytest
+from pathlib import Path
+from isgri.catalog import ScwQuery
+from isgri.config import Config
+from astropy.table import Table
+import numpy as np
+
+
+def test_scwquery_uses_config(tmp_path, mock_catalog, monkeypatch):
+    """Test ScwQuery uses config when no path provided."""
+    config_path = tmp_path / "config.toml"
+    cfg = Config(config_path)
+    cfg.set(catalog_path=mock_catalog) 
+
+    monkeypatch.setattr(Config, "DEFAULT_PATH", config_path)
+
+    query = ScwQuery()
+    assert str(query.catalog_path) == mock_catalog
+    assert len(query.catalog) == 1000  
+
+def test_scwquery_explicit_path_overrides_config(tmp_path, mock_catalog, monkeypatch):
+    """Test explicit path overrides config."""
+    # Create a second catalog
+    n_scw = 50
+    other_catalog = Table({
+        "SWID": [f"{i:012d}" for i in range(n_scw)],
+        "REVOL": np.random.randint(100, 500, n_scw),
+        "TSTART": np.linspace(5000, 6000, n_scw),
+        "TSTOP": np.linspace(5001, 6001, n_scw),
+        "RA_SCX": np.random.uniform(0, 360, n_scw),
+        "DEC_SCX": np.random.uniform(-80, 80, n_scw),
+        "RA_SCZ": np.random.uniform(0, 360, n_scw),
+        "DEC_SCZ": np.random.uniform(-80, 80, n_scw),
+        "CHI": np.random.uniform(0.5, 5.0, n_scw),
+        "CUT_CHI": np.random.uniform(0.5, 5.0, n_scw),
+        "GTI_CHI": np.random.uniform(0.5, 5.0, n_scw),
+    })
+    other_path = tmp_path / "other_catalog.fits"
+    other_catalog.write(other_path, overwrite=True)
+
+    config_path = tmp_path / "config.toml"
+    cfg = Config(config_path)
+    cfg.set(catalog_path=other_path)
+
+    monkeypatch.setattr(Config, "DEFAULT_PATH", config_path)
+    query = ScwQuery()
+    assert query.catalog_path == Path(other_path)
+    assert len(query.catalog) == 50  
+
+
+    # path should override config
+    query = ScwQuery(mock_catalog)
+    assert query.catalog_path == Path(mock_catalog)
+    assert len(query.catalog) == 1000  
+
+
+def test_scwquery_no_config_raises(tmp_path, monkeypatch):
+    """Test ScwQuery raises when no config and no path."""
+    # Empty config
+    config_path = tmp_path / "config.toml"
+    Config(config_path).create_new()
+
+    monkeypatch.setattr(Config, "DEFAULT_PATH", config_path)
+
+    with pytest.raises(ValueError, match="No catalog_path provided and no catalog_path in config"):
+        ScwQuery()
+
+
+def test_scwquery_config_file_not_exists(tmp_path, monkeypatch):
+    """Test ScwQuery raises when config points to non-existent file."""
+    config_path = tmp_path / "config.toml"
+    cfg = Config(config_path)
+    cfg.set(catalog_path=Path("/tmp/nonexistent_catalog.fits"))
+
+    monkeypatch.setattr(Config, "DEFAULT_PATH", config_path)
+
+    # Should raise when file doesn't exist (in config.catalog_path property)
+    with pytest.raises(FileNotFoundError, match="Catalog path does not exist"):
+        ScwQuery()

@@ -4,19 +4,25 @@ Python toolkit for INTEGRAL/ISGRI data analysis.
 
 ## Features
 
-### 📊 SCW Catalog Query
+### Command Line Interface
+Query catalogs directly from the terminal:
+- Filter by time, position, quality, revolution
+- Export results to FITS/CSV
+- List SWIDs for batch processing
+
+### SCW Catalog Query
 Query INTEGRAL Science Window catalogs with a fluent Python API:
 - Filter by time, position, quality, revolution
 - Calculate detector offsets
 - Export results to FITS/CSV
 
-### 💡 Light Curve Analysis
+### Light Curve Analysis
 Extract and analyze ISGRI light curves:
 - Event loading with PIF weighting
 - Custom time binning
 - Module-by-module analysis
 - Quality metrics (chi-squared tests)
-- Time conversions (IJD ↔ UTC)
+- Time conversions (IJD to/from UTC)
 
 
 ## Installation
@@ -26,6 +32,25 @@ pip install isgri
 ```
 
 ## Quick Start
+
+### CLI Usage
+
+```bash
+# Configure default paths (once)
+isgri config-set --catalog ~/data/scw_catalog.fits
+
+# Query by time range
+isgri query --tstart 2010-01-01 --tstop 2010-12-31
+
+# Query Crab with quality cut
+isgri query --ra 83.63 --dec 22.01 --max-chi 2.0 --fov full
+
+# Get list of SWIDs for processing
+isgri query --tstart 3000 --tstop 3100 --list-swids > swids.txt
+
+# Export results
+isgri query --tstart 3000 --tstop 3100 --output results.fits
+```
 
 ### Query SCW Catalog
 
@@ -67,8 +92,34 @@ chi = qm.raw_chi_squared()
 print(f"Chisq/dof = {chi:.2f}")
 ```
 
+## Configuration
+
+ISGRI stores configuration in default config folder for each system (see: platformdirs package)
+
+```bash
+# View current config
+isgri config
+
+# Set paths
+isgri config-set --archive /path/to/archive --catalog /path/to/catalog.fits
+```
+
+Config can also be used in Python:
+
+```python
+from isgri.config import get_config
+
+cfg = get_config()
+print(cfg.archive_path)
+print(cfg.catalog_path)
+```
+
+Local config file `isgri_config.toml` in current directory overrides global config.
+
+
 ## Documentation
 
+- **CLI Reference**: Run `isgri --help` or `isgri <command> --help`
 - **Catalog Tutorial**: [scwquery_walkthrough.ipynb](https://github.com/dominp/isgri/blob/main/demo/scwquery_walkthrough.ipynb)
 - **Light Curve Tutorial**: [lightcurve_walkthrough.ipynb](https://github.com/dominp/isgri/blob/main/demo/lightcurve_walkthrough.ipynb)
 - **API Reference**: Use `help()` in Python or see docstrings
@@ -80,12 +131,14 @@ isgri/
 ├── catalog/          # SCW catalog query tools
 │   ├── scwquery.py   # Main query interface
 │   └── wcs.py        # Coordinate transformations
-└── utils/            # Light curve analysis utilities
-    ├── lightcurve.py # Light curve class
-    ├── quality.py    # Quality metrics
-    ├── pif.py        # PIF tools
-    ├── file_loaders.py
-    └── time_conversion.py
+├── utils/            # Light curve analysis utilities
+│   ├── lightcurve.py # Light curve class
+│   ├── quality.py    # Quality metrics
+│   ├── pif.py        # PIF tools
+│   ├── file_loaders.py
+│   └── time_conversion.py
+├── config.py         # Configuration management
+└── cli.py            # Command line interface
 ```
 
 ## Requirements
