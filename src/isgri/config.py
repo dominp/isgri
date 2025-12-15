@@ -12,6 +12,28 @@ import tomli_w
 
 
 class Config:
+    """
+    Configuration manager for ISGRI.
+
+    Manages paths to archive directory and summary catalog. Config is stored
+    in platform-specific location (~/.config/isgri/config.toml on Linux).
+    Falls back to local isgri_config.toml if global config doesn't exist.
+
+    Parameters
+    ----------
+    path : Path, optional
+        Custom config file path. If not provided, uses platform default.
+
+    Attributes
+    ----------
+    path : Path
+        Path to config file
+    archive_path : Path or None
+        Path to INTEGRAL archive directory
+    summary_path : Path or None
+        Path to summary catalog FITS file (validated on access)
+    """
+
     DEFAULT_PATH = Path(user_config_dir("isgri")) / "config.toml"
 
     def __init__(self, path: Optional[Path] = None):
@@ -20,6 +42,14 @@ class Config:
 
     @property
     def config(self) -> dict:
+        """
+        Load and return config dictionary.
+
+        Returns
+        -------
+        dict
+            Configuration dictionary
+        """
         if self._config is not None:
             return self._config
 
@@ -39,6 +69,14 @@ class Config:
 
     @property
     def archive_path(self) -> Optional[Path]:
+        """
+        Get archive directory path from config.
+
+        Returns
+        -------
+        Path or None
+            Path to archive directory. No validation performed.
+        """
         path_str = self.config.get("archive_path")
         if path_str:
             return Path(path_str)
@@ -46,6 +84,19 @@ class Config:
 
     @property
     def summary_path(self) -> Optional[Path]:
+        """
+        Get summary catalog path from config.
+
+        Returns
+        -------
+        Path or None
+            Path to summary FITS file
+
+        Raises
+        ------
+        FileNotFoundError
+            If configured path doesn't exist
+        """
         path_str = self.config.get("summary_path")
         if not path_str:
             return None
@@ -55,11 +106,22 @@ class Config:
         return path
 
     def save(self):
+        """Save current config to file."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.path, "wb") as f:
             tomli_w.dump(self._config or {}, f)
 
     def create_new(self, archive_path: Optional[Path] = None, summary_path: Optional[Path] = None):
+        """
+        Create new config file with given paths.
+
+        Parameters
+        ----------
+        archive_path : Path, optional
+            Path to archive directory
+        summary_path : Path, optional
+            Path to summary catalog FITS file
+        """
         self._config = {}
         if archive_path:
             self._config["archive_path"] = str(archive_path)
@@ -68,6 +130,16 @@ class Config:
         self.save()
 
     def set(self, archive_path: Optional[Path] = None, summary_path: Optional[Path] = None):
+        """
+        Update config paths and save.
+
+        Parameters
+        ----------
+        archive_path : Path, optional
+            New archive directory path
+        summary_path : Path, optional
+            New summary catalog path
+        """
         if archive_path:
             self.config["archive_path"] = str(archive_path)
         if summary_path:
