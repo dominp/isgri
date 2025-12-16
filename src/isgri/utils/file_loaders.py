@@ -131,9 +131,9 @@ def load_isgri_events(events_path: Union[str, Path]) -> Tuple[Table, NDArray[np.
         - ISGRI_ENERGY : Energy in keV
         - DETY : Y detector coordinate (0-129)
         - DETZ : Z detector coordinate (0-133)
-    gtis : ndarray, shape (N, 2)
+    gtis : ndarray, shape (N, 2) or None
         Good Time Intervals [start, stop] pairs in IJD.
-        If no GTI extension found, uses [first_event, last_event].
+        If no GTI extension found, returns None.
     metadata : dict
         Header metadata with keys:
         - REVOL : Revolution number
@@ -141,6 +141,7 @@ def load_isgri_events(events_path: Union[str, Path]) -> Tuple[Table, NDArray[np.
         - TSTART, TSTOP : Start/stop times (IJD)
         - RA_SCX, DEC_SCX : Pointing axis coordinates
         - RA_SCZ, DEC_SCZ : Z-axis coordinates
+        - NoEVTS : Number of events in file
 
     Raises
     ------
@@ -184,6 +185,7 @@ def load_isgri_events(events_path: Union[str, Path]) -> Tuple[Table, NDArray[np.
             "DEC_SCX": header.get("DEC_SCX"),
             "RA_SCZ": header.get("RA_SCZ"),
             "DEC_SCZ": header.get("DEC_SCZ"),
+            "NoEVTS": header.get("NAXIS2"),
         }
 
         # Load GTIs
@@ -191,10 +193,11 @@ def load_isgri_events(events_path: Union[str, Path]) -> Tuple[Table, NDArray[np.
             gti_data = hdu["IBIS-GNRL-GTI"].data
             gtis = np.column_stack([gti_data["START"], gti_data["STOP"]])
         except (KeyError, IndexError):
-            # No GTI extension - use full time range
-            t_start = events_data["TIME"][0]
-            t_stop = events_data["TIME"][-1]
-            gtis = np.array([[t_start, t_stop]])
+            # No GTI extension - return empty GTI
+            # t_start = events_data["TIME"][0]
+            # t_stop = events_data["TIME"][-1]
+            # gtis = np.array([[t_start, t_stop]])
+            gtis = None
 
     # Filter bad events (SELECT_FLAG != 0)
     good_mask = events_data["SELECT_FLAG"] == 0
