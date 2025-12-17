@@ -86,5 +86,5 @@ class CatalogBuilder:
     def _find_scws(self) -> tuple[np.ndarray[str], np.ndarray[str]]:
         # Find all SCW files in the archive
         scws_files = subprocess.run(
-            ["find", "-L", self.archive_path, "-name", "isgri_events.fits.gz"], capture_output=True, text=True
+            ["ls", f"{self.archive_path}/*", "|", "isgri_events.fits.gz"], capture_output=True, text=True
         )

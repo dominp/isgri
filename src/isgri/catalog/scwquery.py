@@ -344,6 +344,48 @@ class ScwQuery:
             combined_mask &= filt.mask
         return self.catalog[combined_mask]
 
+    def write(
+        self, output_path: Union[str, Path], swid_only: Optional[str] = False, overwrite: Optional[bool] = False
+    ):
+        """Write filtered catalog to the file.
+
+        Parameters
+        ----------
+        output_path : str or Path
+            Path to output file. Format auto-detected from extension:
+                - .txt: SWID list (one per line)
+                - .fits: FITS table
+                - .csv: CSV table
+        swid_only : bool, optional
+            If True, write only SWID list regardless of extension
+        overwrite : bool, optional
+            Whether to overwrite existing file, by default False
+
+        Raises
+        ------
+        FileExistsError
+            If file exists and overwrite=False
+
+        Examples
+        --------
+        >>> query.time(tstart=3000).write("filtered_scws.fits", overwrite=True)
+        >>> query.quality(max_chi=2.0).write("good_scws.txt", swid_only=True)
+        >>> query.write("scws.csv")
+        >>> query.write("output", swid_only=True)  # Force SWID list regardless of extension
+        """
+
+        results = self.get()
+        if isinstance(output_path, str):
+            output_path = Path(output_path)
+        if output_path.exists() and not overwrite:
+            raise FileExistsError(f"Output file already exists: {output_path}")
+        if swid_only or output_path.suffix == ".txt":
+            with open(output_path, "w") as f:
+                for swid in results["SWID"]:
+                    f.write(f"{swid}\n")
+        else:
+            results.write(output_path, overwrite=overwrite)
+
     def count(self) -> int:
         """
         Count SCWs matching current filters.
