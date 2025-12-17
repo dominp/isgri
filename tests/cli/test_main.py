@@ -54,7 +54,7 @@ def test_cli_help(runner):
 
 def test_query_with_catalog(runner, mock_catalog):
     """Test query command with explicit catalog."""
-    result = runner.invoke(main, ["query", "--catalog", str(mock_catalog)])
+    result = runner.invoke(main, ["query", "--catalog", str(mock_catalog), "--tstart", "3000", "--tstop", "4000"])
     assert result.exit_code == 0
     assert "Found" in result.output
     assert "100" in result.output
@@ -62,14 +62,14 @@ def test_query_with_catalog(runner, mock_catalog):
 
 def test_query_count(runner, mock_catalog):
     """Test query --count flag."""
-    result = runner.invoke(main, ["query", "--catalog", str(mock_catalog), "--count"])
+    result = runner.invoke(main, ["query", "--catalog", str(mock_catalog),"--tstart", "3000", "--count"])
     assert result.exit_code == 0
     assert result.output.strip() == "100"
 
 
 def test_query_list_swids(runner, mock_catalog):
     """Test query --list-swids flag."""
-    result = runner.invoke(main, ["query", "--catalog", str(mock_catalog), "--list-swids"])
+    result = runner.invoke(main, ["query", "--catalog", str(mock_catalog), "--tstart", "3000","--list-swids"])
     assert result.exit_code == 0
     lines = result.output.strip().split("\n")
     assert len(lines) == 100
@@ -86,7 +86,7 @@ def test_query_with_filters(runner, mock_catalog):
 def test_query_output_fits(runner, mock_catalog, tmp_path):
     """Test query with FITS output."""
     output_file = tmp_path / "results.fits"
-    result = runner.invoke(main, ["query", "--catalog", str(mock_catalog), "--output", str(output_file)])
+    result = runner.invoke(main, ["query", "--catalog", str(mock_catalog),"--tstart", "3000", "--output", str(output_file)])
     assert result.exit_code == 0
     assert output_file.exists()
     assert "Saved" in result.output
@@ -95,7 +95,7 @@ def test_query_output_fits(runner, mock_catalog, tmp_path):
 def test_query_output_csv(runner, mock_catalog, tmp_path):
     """Test query with CSV output."""
     output_file = tmp_path / "results.csv"
-    result = runner.invoke(main, ["query", "--catalog", str(mock_catalog), "--output", str(output_file)])
+    result = runner.invoke(main, ["query", "--catalog", str(mock_catalog),"--tstart", "3000", "--output", str(output_file)])
     assert result.exit_code == 0
     assert output_file.exists()
 
@@ -107,7 +107,7 @@ def test_query_no_catalog_no_config(runner, tmp_path, monkeypatch):
 
     result = runner.invoke(main, ["query"])
     assert result.exit_code != 0
-    assert "No catalog_path provided" in result.output
+    assert "No catalog configured" in result.output
 
 
 def test_query_uses_config(runner, mock_catalog, tmp_path, monkeypatch):
@@ -118,7 +118,7 @@ def test_query_uses_config(runner, mock_catalog, tmp_path, monkeypatch):
 
     monkeypatch.setattr(Config, "DEFAULT_PATH", config_path)
 
-    result = runner.invoke(main, ["query"])
+    result = runner.invoke(main, ["query","--tstart", "3000", ])
     assert result.exit_code == 0
     assert "Found 100" in result.output
 

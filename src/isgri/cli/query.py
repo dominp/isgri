@@ -51,13 +51,11 @@ def parse_coord(coord):
 
 
 def query_direct(
-    catalog, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revolution, output, list_swids, count
+    catalog_path, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revolution, output, list_swids, count
 ):
     try:
-        # Load catalog
-        q = ScwQuery(catalog)
+        q = ScwQuery(catalog_path)
         initial_count = len(q.catalog)
-
         # Parse times (handle both IJD and ISO)
         tstart = parse_time(tstart)
         tstop = parse_time(tstop)
@@ -116,14 +114,6 @@ def query_interactive(catalog_path):
     """Run interactive query session."""
     click.echo("=== Interactive Query Mode ===\n")
 
-    # Load catalog
-    if catalog_path is None:
-        cfg = Config()
-        catalog_path = cfg.catalog_path
-        if not catalog_path:
-            click.echo("Error: No catalog configured", err=True)
-            raise click.Abort()
-
     q = ScwQuery(catalog_path)
     click.echo(f"Loaded {len(q.catalog)} SCWs")
     click.echo("Type 'help' for commands\n")
@@ -157,12 +147,10 @@ def query_interactive(catalog_path):
 
             elif cmd == "quality":
                 max_chi = click.prompt("Max chi-squared", type=float)
-                chi_type = click.prompt(
-                    "Chi type", type=click.Choice(["RAW", "CUT", "GTI"]), default="CUT"
-                )
+                chi_type = click.prompt("Chi type", type=click.Choice(["RAW", "CUT", "GTI"]), default="CUT")
                 q = q.quality(max_chi=max_chi, chi_type=chi_type)
                 click.echo(f"→ {q.count()} SCWs")
-                
+
             elif cmd == "show":
                 results = q.get()
                 click.echo(f"\n{len(results)} SCWs:")

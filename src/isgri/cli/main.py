@@ -66,6 +66,14 @@ def query(catalog, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revol
 
             isgri query --ra 83.63 --dec 22.01 --count
     """
+    if catalog is None:
+        cfg = Config()
+        catalog = cfg.catalog_path
+
+        if not catalog:
+            click.echo("Error: No catalog configured", err=True)
+            raise click.Abort()
+
     if any(param is not None for param in [tstart, tstop, ra, dec, radius, max_chi, revolution]):
         query_direct(
             catalog, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revolution, output, list_swids, count
