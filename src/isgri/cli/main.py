@@ -17,16 +17,17 @@ def main():
 @click.option("--catalog", type=click.Path(), help="Path to catalog FITS file. If not provided, uses config value.")
 @click.option("--tstart", help="Start time (YYYY-MM-DD or IJD)")
 @click.option("--tstop", help="Stop time (YYYY-MM-DD or IJD)")
-@click.option("--ra", type=float, help="Right ascension (degrees)")
-@click.option("--dec", type=float, help="Declination (degrees)")
+@click.option("--ra",  help="Right ascension (degrees or HH:MM:SS)")
+@click.option("--dec", help="Declination (degrees or DD:MM:SS)")
+@click.option("--separation", "-s", type=float, help="Angular separation (degrees)")
 @click.option("--fov", type=click.Choice(["full", "any"]), default="any", help="Field of view mode")
 @click.option("--max-chi", type=float, help="Maximum chi-squared value")
 @click.option("--chi-type", type=click.Choice(["RAW", "CUT", "GTI"]), default="CUT", help="Type of chi-squared value")
 @click.option("--revolution", "-r", help="Revolution number")
-@click.option("--output", "-o", type=click.Path(), help="Output file (.fits or .csv)")
+@click.option("--output", "-o", type=click.Path(), help="Output file (.fits or .csv or any if --list-swids or --count)")
 @click.option("--list-swids", is_flag=True, help="Only output SWID list")
 @click.option("--count", is_flag=True, help="Only show count")
-def query(catalog, tstart, tstop, ra, dec, fov, max_chi, chi_type, revolution, output, list_swids, count):
+def query(catalog, tstart, tstop, ra, dec, separation, fov, max_chi, chi_type, revolution, output, list_swids, count):
     """
     Query INTEGRAL science window catalog.
 

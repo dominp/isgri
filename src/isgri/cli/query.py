@@ -28,7 +28,31 @@ def parse_time(time_str):
         return time_str
 
 
-def query_direct(catalog, tstart, tstop, ra, dec, fov, max_chi, chi_type, revolution, output, list_swids, count):
+def parse_coord(coord):
+    """
+    Parse RA and Dec strings as float degrees or sexagesimal strings.
+
+    Parameters
+    ----------
+    coord : str or None
+        Coordinate as float degrees or sexagesimal string
+    Returns
+    -------
+    float or str or None
+        Parsed coordinate value
+    """
+    if coord is None:
+        return None
+
+    try:
+        return float(coord)
+    except ValueError:
+        return coord
+
+
+def query_direct(
+    catalog, tstart, tstop, ra, dec, separation, fov, max_chi, chi_type, revolution, output, list_swids, count
+):
     try:
         # Load catalog
         q = ScwQuery(catalog)
@@ -43,7 +67,12 @@ def query_direct(catalog, tstart, tstop, ra, dec, fov, max_chi, chi_type, revolu
             q = q.time(tstart=tstart, tstop=tstop)
 
         if ra is not None and dec is not None:
-            q = q.position(ra=ra, dec=dec, fov_mode=fov)
+            ra = parse_coord(ra)
+            dec = parse_coord(dec)
+            if separation is not None:
+                q = q.position(ra=ra, dec=dec, separation=separation)
+            else:
+                q = q.position(ra=ra, dec=dec, fov_mode=fov)
 
         if max_chi is not None:
             q = q.quality(max_chi=max_chi, chi_type=chi_type)
