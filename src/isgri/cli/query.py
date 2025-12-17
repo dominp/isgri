@@ -51,7 +51,7 @@ def parse_coord(coord):
 
 
 def query_direct(
-    catalog, tstart, tstop, ra, dec, separation, fov, max_chi, chi_type, revolution, output, list_swids, count
+    catalog, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revolution, output, list_swids, count
 ):
     try:
         # Load catalog
@@ -69,8 +69,8 @@ def query_direct(
         if ra is not None and dec is not None:
             ra = parse_coord(ra)
             dec = parse_coord(dec)
-            if separation is not None:
-                q = q.position(ra=ra, dec=dec, separation=separation)
+            if radius is not None:
+                q = q.position(ra=ra, dec=dec, radius=radius)
             else:
                 q = q.position(ra=ra, dec=dec, fov_mode=fov)
 
