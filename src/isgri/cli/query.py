@@ -110,3 +110,75 @@ def query_direct(
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         raise click.Abort()
+
+
+def query_interactive(catalog_path):
+    """Run interactive query session."""
+    click.echo("=== Interactive Query Mode ===\n")
+
+    # Load catalog
+    if catalog_path is None:
+        cfg = Config()
+        catalog_path = cfg.catalog_path
+        if not catalog_path:
+            click.echo("Error: No catalog configured", err=True)
+            raise click.Abort()
+
+    q = ScwQuery(catalog_path)
+    click.echo(f"Loaded {len(q.catalog)} SCWs")
+    click.echo("Type 'help' for commands\n")
+
+    while True:
+        try:
+            cmd = click.prompt("query>", default="").strip().lower()
+
+            if cmd in ("exit", "quit", "q"):
+                break
+            elif cmd == "help":
+                click.echo("Commands: time, pos, quality, show, reset, save, exit")
+            elif cmd == "time":
+                tstart = click.prompt("Start", default="", show_default=False)
+                tstop = click.prompt("Stop", default="", show_default=False)
+                tstart = parse_time(tstart) if tstart else None
+                tstop = parse_time(tstop) if tstop else None
+                q = q.time(tstart=tstart or None, tstop=tstop or None)
+                click.echo(f"→ {q.count()} SCWs")
+            elif cmd == "pos":
+                ra = click.prompt("RA")
+                dec = click.prompt("Dec")
+                mode = click.prompt("Mode", type=click.Choice(["fov", "radius"]), default="fov")
+                if mode == "radius":
+                    radius = click.prompt("Radius (deg)", type=float, default=10.0)
+                    q = q.position(ra=parse_coord(ra), dec=parse_coord(dec), radius=radius)
+                else:
+                    fov_mode = click.prompt("FOV mode", type=click.Choice(["full", "any"]), default="any")
+                    q = q.position(ra=parse_coord(ra), dec=parse_coord(dec), fov_mode=fov_mode)
+                click.echo(f"→ {q.count()} SCWs")
+
+            elif cmd == "quality":
+                max_chi = click.prompt("Max chi-squared", type=float)
+                chi_type = click.prompt(
+                    "Chi type", type=click.Choice(["RAW", "CUT", "GTI"]), default="CUT"
+                )
+                q = q.quality(max_chi=max_chi, chi_type=chi_type)
+                click.echo(f"→ {q.count()} SCWs")
+                
+            elif cmd == "show":
+                results = q.get()
+                click.echo(f"\n{len(results)} SCWs:")
+                click.echo(results[["SWID", "TSTART", "TSTOP"]])
+            elif cmd == "reset":
+                q = q.reset()
+                click.echo(f"→ {len(q.catalog)} SCWs")
+            elif cmd == "save":
+                only_scws = click.confirm("Save only SWID list?", default=False)
+                path = click.prompt("File")
+                q.write(path, overwrite=True, swid_only=only_scws)
+                click.echo(f"✓ Saved")
+            else:
+                click.echo(f"Unknown: {cmd}")
+
+        except KeyboardInterrupt:
+            click.echo("\nUse 'exit' to quit")
+        except Exception as e:
+            click.echo(f"Error: {e}", err=True)

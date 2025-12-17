@@ -3,7 +3,7 @@ from pathlib import Path
 from ..catalog import ScwQuery
 from ..__version__ import __version__
 from ..config import Config
-from .query import query_direct
+from .query import query_direct, query_interactive
 
 
 @click.group()
@@ -66,9 +66,12 @@ def query(catalog, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revol
 
             isgri query --ra 83.63 --dec 22.01 --count
     """
-    query_direct(
-        catalog, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revolution, output, list_swids, count
-    )
+    if any(param is not None for param in [tstart, tstop, ra, dec, radius, max_chi, revolution]):
+        query_direct(
+            catalog, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revolution, output, list_swids, count
+        )
+    else:
+        query_interactive(catalog)
 
 
 @main.command()
