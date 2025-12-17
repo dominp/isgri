@@ -63,7 +63,7 @@ def query(catalog, tstart, tstop, ra, dec, separation, fov, max_chi, chi_type, r
 
             isgri query --ra 83.63 --dec 22.01 --count
     """
-    query_direct(catalog, tstart, tstop, ra, dec, fov, max_chi, chi_type, revolution, output, list_swids, count)
+    query_direct(catalog, tstart, tstop, ra, dec, separation, fov, max_chi, chi_type, revolution, output, list_swids, count)
 
 
 
