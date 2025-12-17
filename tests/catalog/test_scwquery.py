@@ -377,31 +377,34 @@ def test_scwquery_uses_config(tmp_path, mock_catalog, monkeypatch):
     """Test ScwQuery uses config when no path provided."""
     config_path = tmp_path / "config.toml"
     cfg = Config(config_path)
-    cfg.set(catalog_path=mock_catalog) 
+    cfg.set(catalog_path=mock_catalog)
 
     monkeypatch.setattr(Config, "DEFAULT_PATH", config_path)
 
     query = ScwQuery()
     assert str(query.catalog_path) == mock_catalog
-    assert len(query.catalog) == 1000  
+    assert len(query.catalog) == 1000
+
 
 def test_scwquery_explicit_path_overrides_config(tmp_path, mock_catalog, monkeypatch):
     """Test explicit path overrides config."""
     # Create a second catalog
     n_scw = 50
-    other_catalog = Table({
-        "SWID": [f"{i:012d}" for i in range(n_scw)],
-        "REVOL": np.random.randint(100, 500, n_scw),
-        "TSTART": np.linspace(5000, 6000, n_scw),
-        "TSTOP": np.linspace(5001, 6001, n_scw),
-        "RA_SCX": np.random.uniform(0, 360, n_scw),
-        "DEC_SCX": np.random.uniform(-80, 80, n_scw),
-        "RA_SCZ": np.random.uniform(0, 360, n_scw),
-        "DEC_SCZ": np.random.uniform(-80, 80, n_scw),
-        "CHI": np.random.uniform(0.5, 5.0, n_scw),
-        "CUT_CHI": np.random.uniform(0.5, 5.0, n_scw),
-        "GTI_CHI": np.random.uniform(0.5, 5.0, n_scw),
-    })
+    other_catalog = Table(
+        {
+            "SWID": [f"{i:012d}" for i in range(n_scw)],
+            "REVOL": np.random.randint(100, 500, n_scw),
+            "TSTART": np.linspace(5000, 6000, n_scw),
+            "TSTOP": np.linspace(5001, 6001, n_scw),
+            "RA_SCX": np.random.uniform(0, 360, n_scw),
+            "DEC_SCX": np.random.uniform(-80, 80, n_scw),
+            "RA_SCZ": np.random.uniform(0, 360, n_scw),
+            "DEC_SCZ": np.random.uniform(-80, 80, n_scw),
+            "CHI": np.random.uniform(0.5, 5.0, n_scw),
+            "CUT_CHI": np.random.uniform(0.5, 5.0, n_scw),
+            "GTI_CHI": np.random.uniform(0.5, 5.0, n_scw),
+        }
+    )
     other_path = tmp_path / "other_catalog.fits"
     other_catalog.write(other_path, overwrite=True)
 
@@ -412,13 +415,12 @@ def test_scwquery_explicit_path_overrides_config(tmp_path, mock_catalog, monkeyp
     monkeypatch.setattr(Config, "DEFAULT_PATH", config_path)
     query = ScwQuery()
     assert query.catalog_path == Path(other_path)
-    assert len(query.catalog) == 50  
-
+    assert len(query.catalog) == 50
 
     # path should override config
     query = ScwQuery(mock_catalog)
     assert query.catalog_path == Path(mock_catalog)
-    assert len(query.catalog) == 1000  
+    assert len(query.catalog) == 1000
 
 
 def test_scwquery_no_config_raises(tmp_path, monkeypatch):
@@ -441,6 +443,104 @@ def test_scwquery_config_file_not_exists(tmp_path, monkeypatch):
 
     monkeypatch.setattr(Config, "DEFAULT_PATH", config_path)
 
-    # Should raise when file doesn't exist (in config.catalog_path property)
     with pytest.raises(FileNotFoundError, match="Catalog path does not exist"):
         ScwQuery()
+
+
+def test_write_fits(tmp_path, mock_catalog):
+    """Test writing to FITS file"""
+    query = ScwQuery(mock_catalog)
+    output = tmp_path / "results.fits"
+
+    query.time(tstart=3400, tstop=3600).write(output)
+
+    assert output.exists()
+    written = Table.read(output)
+    assert len(written) > 0
+    assert all(written["TSTOP"] >= 3400)
+    assert all(written["TSTART"] <= 3600)
+
+
+def test_write_csv(tmp_path, mock_catalog):
+    """Test writing to CSV file"""
+    query = ScwQuery(mock_catalog)
+    output = tmp_path / "results.csv"
+
+    query.quality(max_chi=2.0).write(output)
+
+    assert output.exists()
+    written = Table.read(output, format="ascii.csv")
+    assert len(written) > 0
+    assert all(written["CHI"] <= 2.0)
+
+
+def test_write_swid_list_txt(tmp_path, mock_catalog):
+    """Test writing SWID list to .txt file"""
+    query = ScwQuery(mock_catalog)
+    output = tmp_path / "swids.txt"
+
+    query.time(tstart=3500).write(output)
+
+    assert output.exists()
+    swids = output.read_text().strip().split("\n")
+    assert len(swids) > 0
+    assert all(len(swid) == 12 for swid in swids)
+
+
+def test_write_swid_only_flag(tmp_path, mock_catalog):
+    """Test swid_only flag forces SWID list"""
+    query = ScwQuery(mock_catalog)
+    output = tmp_path / "swids.fits"  # .fits extension but force SWID
+
+    query.time(tstart=3500).write(output, swid_only=True)
+
+    assert output.exists()
+    # Should be text file despite .fits extension
+    swids = output.read_text().strip().split("\n")
+    assert len(swids) > 0
+    assert all(len(swid) == 12 for swid in swids)
+
+
+def test_write_overwrite_false(tmp_path, mock_catalog):
+    """Test write raises when file exists and overwrite=False"""
+    query = ScwQuery(mock_catalog)
+    output = tmp_path / "results.fits"
+
+    # Write once
+    query.write(output)
+
+    # Try to write again without overwrite
+    with pytest.raises(FileExistsError, match="already exists"):
+        query.write(output, overwrite=False)
+
+
+def test_write_overwrite_true(tmp_path, mock_catalog):
+    """Test write overwrites when overwrite=True"""
+    query = ScwQuery(mock_catalog)
+    output = tmp_path / "results.fits"
+
+    # First write
+    query.time(tstart=3400, tstop=3600).write(output)
+    first_result = Table.read(output)
+
+    # Overwrite with different data
+    query.time(tstart=3700, tstop=3800).write(output, overwrite=True)
+    second_result = Table.read(output)
+
+    # Check different time ranges (data should be different)
+    assert all(first_result["TSTART"] <= 3600)
+    assert all(second_result["TSTOP"] >= 3700)
+    assert first_result != second_result
+
+
+def test_write_empty_result(tmp_path, mock_catalog):
+    """Test writing empty result set"""
+    query = ScwQuery(mock_catalog)
+    output = tmp_path / "empty.fits"
+
+    # Query that returns no results
+    query.time(tstart=10000).write(output)
+
+    assert output.exists()
+    result = Table.read(output)
+    assert len(result) == 0
