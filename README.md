@@ -39,6 +39,9 @@ pip install isgri
 # Configure default paths (once)
 isgri config-set --catalog ~/data/scw_catalog.fits
 
+# Interactive method
+isgri query
+
 # Query by time range
 isgri query --tstart 2010-01-01 --tstop 2010-12-31
 
@@ -123,26 +126,3 @@ Local config file `isgri_config.toml` in current directory overrides global conf
 - **Catalog Tutorial**: [scwquery_walkthrough.ipynb](https://github.com/dominp/isgri/blob/main/demo/scwquery_walkthrough.ipynb)
 - **Light Curve Tutorial**: [lightcurve_walkthrough.ipynb](https://github.com/dominp/isgri/blob/main/demo/lightcurve_walkthrough.ipynb)
 - **API Reference**: Use `help()` in Python or see docstrings
-
-## Project Structure
-
-```
-isgri/
-├── catalog/          # SCW catalog query tools
-│   ├── scwquery.py   # Main query interface
-│   └── wcs.py        # Coordinate transformations
-├── utils/            # Light curve analysis utilities
-│   ├── lightcurve.py # Light curve class
-│   ├── quality.py    # Quality metrics
-│   ├── pif.py        # PIF tools
-│   ├── file_loaders.py
-│   └── time_conversion.py
-├── config.py         # Configuration management
-└── cli.py            # Command line interface
-```
-
-## Requirements
-
-- Python ≥ 3.10
-- astropy
-- numpy
