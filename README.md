@@ -14,7 +14,7 @@ Query catalogs directly from the terminal:
 Query INTEGRAL Science Window catalogs with a fluent Python API:
 - Filter by time, position, quality, revolution
 - Calculate detector offsets
-- Export results to FITS/CSV
+- Export results to any auto detectable astropy table extension or in table aligned data for any other extension.
 
 ### Light Curve Analysis
 Extract and analyze ISGRI light curves:
@@ -70,6 +70,9 @@ results = (cat
     .position(ra=83.63, dec=22.01, fov_mode="full")
     .get()
 )
+
+# Save selected columns to the file
+cat.write('example_file.any_extension',columns=['SWID','TSTART','TSTOP'])
 
 print(f"Found {len(results)} observations")
 ```
