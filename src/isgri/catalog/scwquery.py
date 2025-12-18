@@ -345,24 +345,29 @@ class ScwQuery:
         return self.catalog[combined_mask]
 
     def write(
-        self, output_path: Union[str, Path], swid_only: Optional[str] = False, overwrite: Optional[bool] = False
-    ):
+        self,
+        output_path: Union[str, Path],
+        swid_only: Optional[bool] = False,
+        overwrite: Optional[bool] = False,
+        columns: Optional[list[str]] = None,
+    ) -> None:
         """Write filtered catalog to the file.
 
         Parameters
         ----------
         output_path : str or Path
-            Path to output file. Format auto-detected from extension:
-                - .txt: SWID list (one per line)
-                - .fits: FITS table
-                - .csv: CSV table
+            Path to output file. Supports auto-detectable formats of astropy Table (e.g. fits, csv, qdp) and if failed, plain text in aligned columns.
         swid_only : bool, optional
-            If True, write only SWID list regardless of extension
+            If True, write only SWID list regardless of columns
         overwrite : bool, optional
             Whether to overwrite existing file, by default False
+        columns : list of str, optional
+            List of columns to write. If None, writes all columns or only SWID if swid_only=True
 
         Raises
         ------
+        TypeError
+            If output_path is not str or Path
         FileExistsError
             If file exists and overwrite=False
 
@@ -373,18 +378,39 @@ class ScwQuery:
         >>> query.write("scws.csv")
         >>> query.write("output", swid_only=True)  # Force SWID list regardless of extension
         """
+        if columns is None:
+            columns = self.catalog.colnames if not swid_only else ["SWID"]
 
-        results = self.get()
-        if isinstance(output_path, str):
+        results = self.get()[columns]
+        try:
             output_path = Path(output_path)
+        except TypeError:
+            raise TypeError(f"output_path must be str or Path, got {type(output_path)}")
+
         if output_path.exists() and not overwrite:
             raise FileExistsError(f"Output file already exists: {output_path}")
-        if swid_only or output_path.suffix == ".txt":
-            with open(output_path, "w") as f:
-                for swid in results["SWID"]:
-                    f.write(f"{swid}\n")
-        else:
+
+        try:
             results.write(output_path, overwrite=overwrite)
+            return
+        except Exception:
+            pass
+
+        # Manual write as aligned columns (plain text)
+        colnames = results.colnames
+        rows = [[str(val) for val in row] for row in results]
+        columns = list(zip(*([colnames] + rows)))  # Include headers
+        widths = [max(len(item) for item in col) for col in columns]
+
+        def format_row(file, row: list[str], header: bool = False) -> None:
+            if len(row) == 1 and header:
+                return
+            file.write("  ".join(f"{item:<{widths[i]}}" for i, item in enumerate(row)) + "\n")
+
+        with open(output_path, "w") as f:
+            format_row(f, colnames, header=True)
+            for row in rows:
+                format_row(f, row)
 
     def count(self) -> int:
         """
