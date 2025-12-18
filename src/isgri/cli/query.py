@@ -78,23 +78,15 @@ def query_direct(
         if revolution:
             q = q.revolution(revolution)
 
-        results = q.get()
-
         if count:
-            click.echo(len(results))
-
-        elif list_swids:
-            for swid in results["SWID"]:
-                click.echo(swid)
-
+            click.echo(q.count())
+        
         elif output:
-            if output.endswith(".csv"):
-                results.write(output, format="ascii.csv", overwrite=True)
-            else:
-                results.write(output, format="fits", overwrite=True)
-            click.echo(f"Saved {len(results)} SCWs to {output}")
+            q.write(output, overwrite=True, swid_only=list_swids)
+            click.echo(f"Saved {q.count()} SCWs to {output}")
 
         else:
+            results = q.get()
             click.echo(f"Found {len(results)}/{initial_count} SCWs")
             if len(results) > 0:
                 display_cols = ["SWID", "TSTART", "TSTOP", "RA_SCX", "DEC_SCX"]
