@@ -1,6 +1,6 @@
 from isgri.utils import LightCurve, QualityMetrics
 import numpy as np
-import os, subprocess
+import os, subprocess, glob
 from typing import Optional
 from joblib import Parallel, delayed  # type: ignore
 import multiprocessing
@@ -83,8 +83,31 @@ class CatalogBuilder:
         table_data_list, array_data_list = zip(*data)
         return table_data_list, array_data_list
 
-    def _find_scws(self) -> tuple[np.ndarray[str], np.ndarray[str]]:
+    def find_scws(self) -> tuple[np.ndarray[str], np.ndarray[str]]:
         # Find all SCW files in the archive
-        scws_files = subprocess.run(
-            ["ls", f"{self.archive_path}/*", "|", "isgri_events.fits.gz"], capture_output=True, text=True
-        )
+        revolutions = os.scandir(self.archive_path)
+        out_scws = []
+        for rev in revolutions:
+            if not rev.is_dir():
+                continue
+            for scw in os.scandir(rev.path):
+                swid = scw.name
+                if len(swid) == 16 and '0.0' in swid:
+                    event_file = os.path.join(scw.path, 'isgri_events.fits.gz')
+                    if os.path.exists(event_file):
+                        out_scws.append(swid.split('.')[0])
+        return np.array(out_scws)
+    
+    def update_catalog(self):
+        scws_in_archive = self.find_scws()
+        scws_in_catalog = self.catalog['SWID']
+        scws_to_process = np.isin(scws_in_archive, scws_in_catalog, invert=True)
+        scws_to_process = scws_in_archive[scws_to_process]
+        if len(scws_to_process) == 0:
+            print("Catalog is already up to date.")
+            return
+        
+        
+        
+
+        
