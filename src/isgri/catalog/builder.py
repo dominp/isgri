@@ -41,7 +41,7 @@ class CatalogBuilder:
         _, module_counts = lc.rebin_by_modules(1, emin=15, emax=1000, local_time=False)
         module_counts.insert(0, full_counts)
         module_counts = np.array(module_counts)
-        quality = QualityMetrics.compute(lc)
+        quality = QualityMetrics(lc)
         quality.module_data = {"time": time, "counts": module_counts[1:]}
         raw_chisq = quality.raw_chi_squared()
         clipped_chisq = quality.sigma_clip_chi_squared()
