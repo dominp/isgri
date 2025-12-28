@@ -1,19 +1,28 @@
 from isgri.utils import LightCurve, QualityMetrics
+from ..config import Config
 import numpy as np
 import os, subprocess, glob
 from typing import Optional
 from joblib import Parallel, delayed  # type: ignore
 import multiprocessing
-
+from collections import defaultdict
+from astropy.table import Table
 
 class CatalogBuilder:
     def __init__(
         self,
-        archive_path: str,
-        catalog_path: str,
+        archive_path: Optional[str] = None,
+        catalog_path: Optional[str] = None,
         lightcurve_cache: Optional[str] = None,
         n_cores: Optional[int] = None,
     ):
+        if archive_path is None or catalog_path is None:
+            cfg = Config()
+            if archive_path is None:
+                archive_path = cfg.archive_path
+            if catalog_path is None:
+                catalog_path = cfg.catalog_path
+
         self.archive_path = archive_path
         self.catalog_path = catalog_path
         self.lightcurve_cache = lightcurve_cache
@@ -21,12 +30,8 @@ class CatalogBuilder:
         self.catalog = self._load_catalog()
 
     def _load_catalog(self):
-        if not os.path.exists(self.catalog_path):
-            empty_structure = CatalogStructure.get_empty_structure()
-            return empty_structure
-        else:
-            catalog = CatalogStructure.load_from_fits(self.catalog_path)
-            return catalog
+        catalog = Table.read(self.catalog_path)
+        return catalog
 
     def _process_scw(self, path) -> tuple[dict, list]:
         lc = LightCurve.load_data(path)
@@ -86,28 +91,35 @@ class CatalogBuilder:
     def find_scws(self) -> tuple[np.ndarray[str], np.ndarray[str]]:
         # Find all SCW files in the archive
         revolutions = os.scandir(self.archive_path)
-        out_scws = []
+        swids, swid_paths = [], []
         for rev in revolutions:
             if not rev.is_dir():
                 continue
             for scw in os.scandir(rev.path):
                 swid = scw.name
-                if len(swid) == 16 and '0.0' in swid:
-                    event_file = os.path.join(scw.path, 'isgri_events.fits.gz')
+                if len(swid) == 16 and "0.0" in swid:
+                    event_file = os.path.join(scw.path, "isgri_events.fits.gz")
                     if os.path.exists(event_file):
-                        out_scws.append(swid.split('.')[0])
-        return np.array(out_scws)
-    
+                        swids.append(swid.split(".")[0])
+                        swid_paths.append(event_file)
+        return np.array(swids), np.array(swid_paths)
+
     def update_catalog(self):
-        scws_in_archive = self.find_scws()
-        scws_in_catalog = self.catalog['SWID']
-        scws_to_process = np.isin(scws_in_archive, scws_in_catalog, invert=True)
-        scws_to_process = scws_in_archive[scws_to_process]
-        if len(scws_to_process) == 0:
+        scws_in_archive, scws_paths = self.find_scws()
+        scws_in_catalog = self.catalog["SWID"]
+        mask = np.isin(scws_in_archive, scws_in_catalog, invert=True)
+        to_process_scws = scws_in_archive[mask]
+        to_process_paths = scws_paths[mask]
+        if len(to_process_scws) == 0:
             print("Catalog is already up to date.")
             return
-        
-        
-        
 
-        
+        revolutions = defaultdict(list)
+        for swid, path in zip(to_process_scws, to_process_paths):
+            revolutions[swid[:4]].append(path)
+
+        for revolution, rev_paths in revolutions.items():
+            print(f"Processing revolution {revolution} with {len(rev_paths)} SCWs...")
+            table_data_rows, array_data_list = self._process_rev(rev_paths)
+            self.catalog.add_entries(table_data_rows, array_data_list)
+            print(f"Revolution {revolution} processed and catalog updated.")
