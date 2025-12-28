@@ -8,6 +8,7 @@ import multiprocessing
 from collections import defaultdict
 from astropy.table import Table
 
+
 class CatalogBuilder:
     def __init__(
         self,
@@ -97,12 +98,22 @@ class CatalogBuilder:
                 continue
             for scw in os.scandir(rev.path):
                 swid = scw.name
+                path = scw.path
                 if len(swid) == 16 and "0.0" in swid:
-                    event_file = os.path.join(scw.path, "isgri_events.fits.gz")
-                    if os.path.exists(event_file):
-                        swids.append(swid.split(".")[0])
-                        swid_paths.append(event_file)
+                    swids.append(swid.split(".")[0])
+                    swid_paths.append(path)
         return np.array(swids), np.array(swid_paths)
+
+    def find_event_files(
+        self, swids: np.ndarray[str], swid_paths: np.ndarray[str]
+    ) -> tuple[np.ndarray[str], np.ndarray[str]]:
+        valid_swids, valid_paths = [], []
+        for swid, path in zip(swids, swid_paths):
+            event_file = os.path.join(os.path.dirname(path), "isgri_events.fits.gz")
+            if os.path.exists(event_file):
+                valid_swids.append(swid)
+                valid_paths.append(event_file)
+        return np.array(valid_swids), np.array(valid_paths)
 
     def update_catalog(self):
         scws_in_archive, scws_paths = self.find_scws()
