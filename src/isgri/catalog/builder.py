@@ -92,8 +92,13 @@ class CatalogBuilder:
         data = Parallel(n_jobs=self.n_cores, backend="multiprocessing")(
             delayed(self._process_scw)(path) for path in rev_paths
         )
-        table_data_list, array_data_list = zip(*data)
-        return table_data_list, array_data_list
+        table_data_list, array_data_dicts = zip(*data)
+
+        dtype = [('SWID', 'U16'), ('TIME', 'O'), ('COUNTS', 'O'), ('MODULE_COUNTS', 'O'), ('GTIS', 'O')]
+        array_data = np.empty(len(array_data_dicts), dtype=dtype)
+        for i, d in enumerate(array_data_dicts):
+            array_data[i] = (d['SWID'], d['TIME'], d['COUNTS'], d['MODULE_COUNTS'], d['GTIS'])
+        return table_data_list, array_data
 
     def find_scws(self) -> tuple[np.ndarray[str], np.ndarray[str]]:
         # Find all SCW files in the archive
