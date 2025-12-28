@@ -79,7 +79,7 @@ class CatalogBuilder:
             "CUT_CHI": clipped_chisq,
             "GTI_CHI": gti_chisq,
         }
-        array_data = [lc.metadata["SWID"], time, module_counts, lc.gti]
+        array_data = [lc.metadata["SWID"], time, module_counts, lc.gtis]
         return table_data, array_data
 
     def _process_rev(self, rev_paths: list[str]) -> tuple[list[dict], list[list]]:
