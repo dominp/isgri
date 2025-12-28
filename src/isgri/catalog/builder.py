@@ -109,7 +109,7 @@ class CatalogBuilder:
     ) -> tuple[np.ndarray[str], np.ndarray[str]]:
         valid_swids, valid_paths = [], []
         for swid, path in zip(swids, swid_paths):
-            event_file = os.path.join(os.path.dirname(path), "isgri_events.fits.gz")
+            event_file = os.path.join(path, "isgri_events.fits.gz")
             if os.path.exists(event_file):
                 valid_swids.append(swid)
                 valid_paths.append(event_file)
