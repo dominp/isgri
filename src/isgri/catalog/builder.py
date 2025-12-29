@@ -192,9 +192,10 @@ class CatalogBuilder:
         revolutions = defaultdict(list)
         for swid, path in zip(to_process_scws, to_process_paths):
             revolutions[swid[:4]].append(path)
-
+        revolutions = dict(sorted(revolutions.items()))
         for revolution, rev_paths in revolutions.items():
             print(f"Processing revolution {revolution} with {len(rev_paths)} ScWs...")
             table_data_rows, array_data_list = self._process_rev(rev_paths)
             self._add_catalog_data(table_data_rows)
-            self._add_array_data(revolution, array_data_list)
+            if self.lightcurve_cache is not None:
+                self._add_array_data(revolution, array_data_list)
