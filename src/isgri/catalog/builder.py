@@ -8,7 +8,16 @@ import multiprocessing
 from collections import defaultdict
 from astropy.table import Table
 
-
+new_catalog_names = [
+        'REVOL', 'SWID', 'TSTART', 'ONTIME', 'TSTOP', 
+        'RA_SCX', 'DEC_SCX', 'RA_SCZ', 'DEC_SCZ', 
+        'NoEVTS', 'CHI', 'CUT_CHI', 'GTI_CHI'
+    ]
+new_catalog_dtypes = [
+        'i8', 'S12', 'f8', 'f8', 'f8', 
+        'f8', 'f8', 'f8', 'f8', 
+        'i8', 'f8', 'f8', 'f8'
+    ]
 class CatalogBuilder:
     def __init__(
         self,
@@ -22,8 +31,6 @@ class CatalogBuilder:
             if archive_path is None:
                 archive_path = cfg.archive_path
             if catalog_path is None:
-                catalog_path = cfg.catalog_path
-
         self.archive_path = archive_path
         self.catalog_path = catalog_path
         self.lightcurve_cache = lightcurve_cache
