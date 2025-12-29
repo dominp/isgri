@@ -176,13 +176,17 @@ class CatalogBuilder:
         return np.array(valid_swids), np.array(valid_paths)
 
     def update_catalog(self):
+        print("Looking for ScWs in archive...")
         scws_in_archive, scws_paths = self.find_scws()
+        print(f"Found {len(scws_in_archive)} ScWs in archive.")
         scws_in_catalog = self.catalog["SWID"]
         mask = np.isin(scws_in_archive, scws_in_catalog, invert=True)
-        to_process_scws = scws_in_archive[mask]
-        to_process_paths = scws_paths[mask]
+        new_scws = scws_in_archive[mask]
+        new_paths = scws_paths[mask]
+        to_process_scws, to_process_paths = self.find_event_files(new_scws, new_paths)
+        print(f"{len(to_process_scws)} ScWs have event files and will be processed.")
         if len(to_process_scws) == 0:
-            print("Catalog is already up to date.")
+            print("Exiting.")
             return
 
         revolutions = defaultdict(list)
@@ -194,4 +198,3 @@ class CatalogBuilder:
             table_data_rows, array_data_list = self._process_rev(rev_paths)
             self._add_catalog_data(table_data_rows)
             self._add_array_data(revolution, array_data_list)
-            print(f"Finished processing revolution {revolution}.")
