@@ -6,18 +6,27 @@ from typing import Optional
 from joblib import Parallel, delayed  # type: ignore
 import multiprocessing
 from collections import defaultdict
-from astropy.table import Table
+from astropy.table import Table, vstack
+from pathlib import Path
 
 new_catalog_names = [
-        'REVOL', 'SWID', 'TSTART', 'ONTIME', 'TSTOP', 
-        'RA_SCX', 'DEC_SCX', 'RA_SCZ', 'DEC_SCZ', 
-        'NoEVTS', 'CHI', 'CUT_CHI', 'GTI_CHI'
-    ]
-new_catalog_dtypes = [
-        'i8', 'S12', 'f8', 'f8', 'f8', 
-        'f8', 'f8', 'f8', 'f8', 
-        'i8', 'f8', 'f8', 'f8'
-    ]
+    "REVOL",
+    "SWID",
+    "TSTART",
+    "ONTIME",
+    "TSTOP",
+    "RA_SCX",
+    "DEC_SCX",
+    "RA_SCZ",
+    "DEC_SCZ",
+    "NoEVTS",
+    "CHI",
+    "CUT_CHI",
+    "GTI_CHI",
+]
+new_catalog_dtypes = ["i8", "S12", "f8", "f8", "f8", "f8", "f8", "f8", "f8", "i8", "f8", "f8", "f8"]
+
+
 class CatalogBuilder:
     def __init__(
         self,
@@ -31,6 +40,9 @@ class CatalogBuilder:
             if archive_path is None:
                 archive_path = cfg.archive_path
             if catalog_path is None:
+                catalog_path = cfg.catalog_path
+        if catalog_path is None:
+            raise FileNotFoundError("Catalog path must be specified either in arguments or config file.")
         self.archive_path = archive_path
         self.catalog_path = catalog_path
         self.lightcurve_cache = lightcurve_cache
@@ -38,8 +50,35 @@ class CatalogBuilder:
         self.catalog = self._load_catalog()
 
     def _load_catalog(self):
-        catalog = Table.read(self.catalog_path)
-        return catalog
+        catalog_path = Path(self.catalog_path)
+        if catalog_path.is_file():
+            return Table.read(catalog_path)
+        elif catalog_path.parent.is_dir():
+            print("Catalog file not found, creating new catalog.")
+            return Table(names=new_catalog_names, dtype=new_catalog_dtypes)
+        else:
+            raise FileNotFoundError(f"Directory for catalog does not exist: {catalog_path.parent}")
+
+    def _add_catalog_data(self, table_data_rows: list[dict]):
+        new_data = Table(rows=table_data_rows, names=new_catalog_names, dtype=new_catalog_dtypes)
+        self.catalog = vstack([self.catalog, new_data])
+        self.catalog.sort("TSTART")
+
+        temp_catalog_path = Path(self.catalog_path).with_suffix(".tmp")
+        self.catalog.write(temp_catalog_path, overwrite=True, format="fits")
+        os.replace(temp_catalog_path, self.catalog_path)
+
+    def _add_array_data(self, rev: str, array_data: np.ndarray):
+        if self.lightcurve_cache is None:
+            raise ValueError("Lightcurve cache path is not set.")
+        file_path = Path(self.lightcurve_cache) / f"{int(rev):0>4}.npy"
+
+        if file_path.exists():
+            old_data = np.load(file_path, allow_pickle=True)
+            mask = ~np.isin(old_data["SWID"], array_data["SWID"])
+            array_data = np.concatenate([old_data[mask], array_data])
+
+        np.save(file_path, array_data)
 
     def _process_scw(self, path) -> tuple[dict, list]:
         lc = LightCurve.load_data(path)
@@ -52,7 +91,10 @@ class CatalogBuilder:
         quality.module_data = {"time": time, "counts": module_counts[1:]}
         raw_chisq = quality.raw_chi_squared()
         clipped_chisq = quality.sigma_clip_chi_squared()
-        gti_chisq = quality.gti_chi_squared()
+        try:
+            gti_chisq = quality.gti_chi_squared()
+        except ValueError:
+            gti_chisq = np.nan
 
         # cnames = [
         #     ("REVOL", int),
@@ -101,10 +143,10 @@ class CatalogBuilder:
         )
         table_data_list, array_data_dicts = zip(*data)
 
-        dtype = [('SWID', 'U16'), ('TIME', 'O'), ('COUNTS', 'O'), ('MODULE_COUNTS', 'O'), ('GTIS', 'O')]
+        dtype = [("SWID", "U16"), ("TIME", "O"), ("COUNTS", "O"), ("MODULE_COUNTS", "O"), ("GTIS", "O")]
         array_data = np.empty(len(array_data_dicts), dtype=dtype)
         for i, d in enumerate(array_data_dicts):
-            array_data[i] = (d['SWID'], d['TIME'], d['COUNTS'], d['MODULE_COUNTS'], d['GTIS'])
+            array_data[i] = (d["SWID"], d["TIME"], d["COUNTS"], d["MODULE_COUNTS"], d["GTIS"])
         return table_data_list, array_data
 
     def find_scws(self) -> tuple[np.ndarray[str], np.ndarray[str]]:
@@ -148,7 +190,8 @@ class CatalogBuilder:
             revolutions[swid[:4]].append(path)
 
         for revolution, rev_paths in revolutions.items():
-            print(f"Processing revolution {revolution} with {len(rev_paths)} SCWs...")
+            print(f"Processing revolution {revolution} with {len(rev_paths)} ScWs...")
             table_data_rows, array_data_list = self._process_rev(rev_paths)
-            self.catalog.add_entries(table_data_rows, array_data_list)
-            print(f"Revolution {revolution} processed and catalog updated.")
+            self._add_catalog_data(table_data_rows)
+            self._add_array_data(revolution, array_data_list)
+            print(f"Finished processing revolution {revolution}.")
