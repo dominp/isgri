@@ -366,9 +366,10 @@ class QualityMetrics:
             time, counts = data["time"], data["counts"]
 
         if gtis is None:
-            if self.lightcurve is None:
-                raise ValueError("Must provide gtis or set lightcurve")
-            gtis = self.lightcurve.gtis
+            if self.lightcurve is not None:
+                gtis = self.lightcurve.gtis
+        if gtis is None or len(gtis) == 0:
+            raise ValueError("GTIs must be provided or available in lightcurve")
 
         # Check for overlap
         if gtis[0, 0] > time[-1] or gtis[-1, 1] < time[0]:
