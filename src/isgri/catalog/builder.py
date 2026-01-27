@@ -49,7 +49,7 @@ new_catalog_names = [
     "CUT_CHI",
     "GTI_CHI",
 ]
-new_catalog_dtypes = ["i8", "U12", "f8", "f8", "f8", "f8", "f8", "f8", "f8", "i8", "f8", "f8", "f8"]
+new_catalog_dtypes = ["i8", "S12", "f8", "f8", "f8", "f8", "f8", "f8", "f8", "i8", "f8", "f8", "f8"]
 
 
 class CatalogBuilder:
@@ -400,7 +400,7 @@ class CatalogBuilder:
         print("Looking for ScWs in archive...")
         scws_in_archive, scws_paths = self.find_scws()
         print(f"Found {len(scws_in_archive)} ScWs in archive.")
-        scws_in_catalog = self.catalog["SWID"]
+        scws_in_catalog = np.array(self.catalog["SWID"], dtype=str)
         mask = np.isin(scws_in_archive, scws_in_catalog, invert=True)
         new_scws = scws_in_archive[mask]
         new_paths = scws_paths[mask]
