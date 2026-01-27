@@ -73,7 +73,6 @@ def temp_catalog_file():
     # Create a temporary catalog file
     with tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=".fits") as f:
         catalog_path = Path(f.name)
-        # Create sample rows
         rows = [
             (150, "015000010010", 5000.1, 1000, 5000.2, 10, 10, 10, 10, 150, 1, 1, 1),
             (151, "015000020010", 6000.1, 1100, 6000.2, 20, 20, 20, 20, 160, 1, 1, 1),
@@ -268,3 +267,44 @@ def test_save_array_data(temp_archive_dir, temp_catalog_file, temp_arr_dir):
     assert len(loaded_data2) == 3
     assert loaded_data2[2]["SWID"] == "015000030010"
     assert np.array_equal(loaded_data2[2]["TIME"], np.array([0.0, 1.0]))
+
+
+def test_update_catalog(temp_archive_dir, temp_catalog_file, temp_arr_dir):
+    builder = CatalogBuilder(
+        archive_path=temp_archive_dir,
+        catalog_path=temp_catalog_file,
+        lightcurve_cache=temp_arr_dir,
+        n_cores=2,
+    )
+    initial_catalog_len = len(builder.catalog)
+    builder.update_catalog()
+    updated_catalog = Table.read(builder.catalog_path)
+    assert len(updated_catalog) >= initial_catalog_len
+    scw_list, _ = builder.find_scws()
+    for scw in scw_list:
+        assert scw in updated_catalog["SWID"]
+    revols = set(scw[:4] for scw in scw_list)
+    for revol in revols:
+        arr_file = temp_arr_dir / f"{revol}.npy"
+        assert arr_file.exists()
+        arr_data = np.load(arr_file, allow_pickle=True)
+        swids_in_arr = [entry["SWID"] for entry in arr_data]
+        swids_in_catalog = updated_catalog["SWID"][updated_catalog["REVOL"] == int(revol)].tolist()
+        for swid in swids_in_catalog:
+            assert swid in swids_in_arr
+
+
+def test_update_catalog_no_new_scws(temp_archive_dir, temp_catalog_file, temp_arr_dir):
+    builder = CatalogBuilder(
+        archive_path=temp_archive_dir,
+        catalog_path=temp_catalog_file,
+        lightcurve_cache=temp_arr_dir,
+        n_cores=2,
+    )
+    initial_catalog_len = len(builder.catalog)
+    builder.update_catalog()  # First update
+    catalog_len_after_first_update = len(builder.catalog)
+    assert catalog_len_after_first_update >= initial_catalog_len
+    builder.update_catalog()
+    catalog_len_after_second_update = len(builder.catalog)
+    assert catalog_len_after_second_update == catalog_len_after_first_update

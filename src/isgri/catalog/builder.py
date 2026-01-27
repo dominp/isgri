@@ -49,7 +49,7 @@ new_catalog_names = [
     "CUT_CHI",
     "GTI_CHI",
 ]
-new_catalog_dtypes = ["i8", "S12", "f8", "f8", "f8", "f8", "f8", "f8", "f8", "i8", "f8", "f8", "f8"]
+new_catalog_dtypes = ["i8", "U12", "f8", "f8", "f8", "f8", "f8", "f8", "f8", "i8", "f8", "f8", "f8"]
 
 
 class CatalogBuilder:
