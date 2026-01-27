@@ -1,3 +1,3 @@
 from .scwquery import ScwQuery
 
-__all__ = ["ScwQuery"]
+__all__ = ["ScwQuery", "CatalogBuilder"]

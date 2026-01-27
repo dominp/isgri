@@ -168,11 +168,14 @@ class CatalogBuilder:
         self, swids: np.ndarray[str], swid_paths: np.ndarray[str]
     ) -> tuple[np.ndarray[str], np.ndarray[str]]:
         valid_swids, valid_paths = [], []
-        for swid, path in zip(swids, swid_paths):
+        print("Checking for event files...")
+        for idx, (swid, path) in enumerate(zip(swids, swid_paths)):
             event_file = os.path.join(path, "isgri_events.fits.gz")
             if os.path.exists(event_file):
                 valid_swids.append(swid)
                 valid_paths.append(event_file)
+            if (idx + 1) % 100 == 0:
+                print(f"Checked {idx + 1}/{len(swids)} ScWs...", end="\r")
         return np.array(valid_swids), np.array(valid_paths)
 
     def update_catalog(self):
