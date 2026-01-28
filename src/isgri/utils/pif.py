@@ -36,6 +36,7 @@ import numpy as np
 from numpy.typing import NDArray
 from typing import Tuple
 from astropy.table import Table
+import warnings
 
 # ISGRI detector module boundaries (mm coordinates)
 # 8 modules total: 4 rows × 2 columns
@@ -99,8 +100,15 @@ def apply_pif_mask(
     events: Table,
     pif_threshold: float = 0.5,
 ) -> Tuple[Table, NDArray[np.float64]]:
+    
     """
     Filter events by PIF threshold and return PIF weights.
+
+    .. deprecated:: 
+        This function is deprecated. PIF filtering is now handled
+        automatically by LightCurve methods using the `use_pif` and
+        `pif_threshold` attributes. Use `LightCurve.load_data()` instead.
+
 
     Events with PIF < threshold are removed. Remaining events are
     weighted by their PIF values for response correction.
@@ -138,6 +146,12 @@ def apply_pif_mask(
     >>> print(f"Kept {len(filtered)}/{len(events)} events")
     >>> print(f"Mean weight: {weights.mean():.3f}")
     """
+    warnings.warn(
+        "apply_pif_mask() is deprecated. Use LightCurve.load_data() with "
+        "use_pif and pif_threshold parameters instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     # Validate inputs
     if not (0 <= pif_threshold <= 1):
         raise ValueError(f"pif_threshold must be in [0, 1], got {pif_threshold}")

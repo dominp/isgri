@@ -43,7 +43,7 @@ from numpy.typing import NDArray
 from typing import Tuple, Dict, Optional, Union
 from pathlib import Path
 import os
-from .pif import apply_pif_mask, coding_fraction, estimate_active_modules
+from .pif import coding_fraction, estimate_active_modules
 
 
 def verify_events_path(path: Union[str, Path]) -> str:
@@ -281,7 +281,6 @@ def merge_metadata(events_metadata: Dict, pif_metadata: Dict) -> Dict:
 def load_isgri_pif(
     pif_path: Union[str, Path],
     events: Table,
-    pif_threshold: float = 0.5,
     pif_extension: int = -1,
 ) -> Tuple[Table, NDArray[np.float64], Dict]:
     """
@@ -296,9 +295,6 @@ def load_isgri_pif(
         Path to PIF FITS file.
     events : Table
         Events table from load_isgri_events() with DETZ, DETY columns.
-    pif_threshold : float, default 0.5
-        Minimum PIF value to keep event (0.0-1.0).
-        Higher values = only well-illuminated pixels.
     pif_extension : int, default -1
         FITS extension index containing PIF data.
         -1 = last extension (typical).
@@ -355,9 +351,6 @@ def load_isgri_pif(
     apply_pif_mask : Apply PIF filtering
     coding_fraction : Calculate coded fraction
     """
-    if not (0 <= pif_threshold <= 1):
-        raise ValueError(f"pif_threshold must be in [0, 1], got {pif_threshold}")
-
     pif_path = Path(pif_path)
     if not pif_path.exists():
         raise FileNotFoundError(f"PIF file not found: {pif_path}")
@@ -387,6 +380,7 @@ def load_isgri_pif(
     pif_metadata["No_Modules"] = estimate_active_modules(pif_file)
 
     # Apply PIF mask
-    filtered_events, pif_weights = apply_pif_mask(pif_file, events, pif_threshold)
+    filtered_events, pif_weights = apply_pif_mask(pif_file, events)
+    events, pif_weights = pif_file[events["DETZ"], events["DETY"]]
 
-    return filtered_events, pif_weights, pif_metadata
+    return events, pif_weights, pif_metadata
