@@ -348,7 +348,6 @@ def load_isgri_pif(
     See Also
     --------
     load_isgri_events : Load event data
-    apply_pif_mask : Apply PIF filtering
     coding_fraction : Calculate coded fraction
     """
     pif_path = Path(pif_path)
@@ -380,7 +379,6 @@ def load_isgri_pif(
     pif_metadata["No_Modules"] = estimate_active_modules(pif_file)
 
     # Apply PIF mask
-    filtered_events, pif_weights = apply_pif_mask(pif_file, events)
-    events, pif_weights = pif_file[events["DETZ"], events["DETY"]]
+    pif_weights = pif_file[events["DETZ"], events["DETY"]]
 
     return events, pif_weights, pif_metadata

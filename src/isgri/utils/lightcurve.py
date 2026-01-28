@@ -103,7 +103,9 @@ class LightCurve:
         detz: NDArray[np.float64],
         weights: NDArray[np.float64],
         metadata: dict,
-    ) -> None:
+        use_pif: bool = True,
+        pif_threshold: float = 0.5,
+    ):
         """
         Initialize LightCurve instance.
 
@@ -133,6 +135,10 @@ class LightCurve:
         self.detz = detz
         self.weights = weights
         self.metadata = metadata
+        self.use_pif = bool(use_pif and np.any(weights != 1.0))
+        self.pif_threshold = pif_threshold
+        self._cached_weights = None
+        self._cached_pif_settings = (self.use_pif, self.pif_threshold)
 
     @classmethod
     def load_data(
@@ -141,6 +147,7 @@ class LightCurve:
         pif_path: Optional[Union[str, Path]] = None,
         scw: Optional[str] = None,
         source: Optional[str] = None,
+        use_pif: bool = True,
         pif_threshold: float = 0.5,
         pif_extension: int = -1,
     ) -> "LightCurve":
@@ -162,8 +169,8 @@ class LightCurve:
         if pif_path:
             if pif_threshold < 0 or pif_threshold > 1:
                 raise ValueError(f"pif_threshold must be in [0, 1], got {pif_threshold}")
-            
-            events, weights, metadata_pif = load_isgri_pif(pif_path, events, pif_threshold, pif_extension)
+
+            events, weights, metadata_pif = load_isgri_pif(pif_path, events, pif_extension)
         else:
             weights = np.ones(len(events))
             metadata_pif = default_pif_metadata()
@@ -172,7 +179,7 @@ class LightCurve:
         time = events["TIME"]
         energies = events["ISGRI_ENERGY"]
         dety, detz = events["DETY"], events["DETZ"]
-        return cls(time, energies, gtis, dety, detz, weights, metadata)
+        return cls(time, energies, gtis, dety, detz, weights, metadata, use_pif, pif_threshold)
 
     def rebin(
         self,
@@ -181,6 +188,8 @@ class LightCurve:
         emax: float,
         local_time: bool = True,
         custom_mask: Optional[NDArray[np.bool_]] = None,
+        use_pif: Optional[bool] = None,
+        pif_threshold: Optional[float] = None,
     ) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
         """
         Rebins the events with the specified bin size and energy range.
@@ -224,10 +233,13 @@ class LightCurve:
         # Create bins
         bins, binsize_actual = self._create_bins(binsize, time, t0, local_time)
 
+        # Get weights
+        weights = self._get_weights(use_pif, pif_threshold)
+
         # Apply filters
         mask = self._create_event_mask(emin, emax, custom_mask)
         time_filtered = time[mask]
-        weights_filtered = self.weights[mask]
+        weights_filtered = weights[mask]
 
         # Histogram
         counts, bin_edges = np.histogram(time_filtered, bins=bins, weights=weights_filtered)
@@ -265,6 +277,42 @@ class LightCurve:
 
         return bins, binsize_actual
 
+    def _get_weights(
+        self, use_pif: Optional[bool] = None, pif_threshold: Optional[float] = None
+    ) -> NDArray[np.float64]:
+        """
+        Get event weights based on PIF settings.
+
+        Parameters
+        ----------
+        use_pif : bool, optional
+            Override instance use_pif setting
+        pif_threshold : float, optional
+            Override instance pif_threshold setting
+
+        Returns
+        -------
+        weights : ndarray
+            Event weights (0 if below threshold, PIF value otherwise, or 1.0 if no PIF)
+        """
+        if use_pif is None:
+            use_pif = self.use_pif
+        if pif_threshold is None:
+            pif_threshold = self.pif_threshold
+
+        cache_key = (use_pif, pif_threshold)
+        if cache_key == self._cached_pif_settings and self._cached_weights is not None:
+            return self._cached_weights
+
+        if not use_pif:
+            weights = np.ones_like(self.weights)
+        else:
+            weights = np.where(self.weights > pif_threshold, self.weights, 0.0)
+
+        self._cached_pif_settings = cache_key
+        self._cached_weights = weights
+        return weights
+
     def _create_event_mask(
         self,
         emin: float,
@@ -298,6 +346,8 @@ class LightCurve:
         emax: float,
         local_time: bool = True,
         custom_mask: Optional[NDArray[np.bool_]] = None,
+        use_pif: Optional[bool] = None,
+        pif_threshold: Optional[float] = None,
     ) -> Tuple[NDArray[np.float64], List[NDArray[np.float64]]]:
         """
         Rebins the events by all 8 detector modules with the specified bin size and energy range.
@@ -337,7 +387,9 @@ class LightCurve:
         time_filtered = time[energy_mask]
         dety_filtered = self.dety[energy_mask]
         detz_filtered = self.detz[energy_mask]
-        weights_filtered = self.weights[energy_mask]
+
+        weights = self._get_weights(use_pif, pif_threshold)
+        weights_filtered = weights[energy_mask]
 
         # Compute module indices using digitize
         dety_bin = np.digitize(dety_filtered, DETY_BOUNDS) - 1  # 0 or 1
@@ -358,6 +410,8 @@ class LightCurve:
         emin: float,
         emax: float,
         local_time: bool = True,
+        use_pif: Optional[bool] = None,
+        pif_threshold: Optional[float] = None,
     ) -> float:
         """
         Calculates the counts in the specified time and energy range.
@@ -373,7 +427,29 @@ class LightCurve:
             float: The total counts in the specified range.
         """
         time = self.local_time if local_time else self.time
-        return np.sum(self.weights[(time >= t1) & (time < t2) & (self.energies >= emin) & (self.energies < emax)])
+        weights = self._get_weights(use_pif, pif_threshold)
+        return np.sum(weights[(time >= t1) & (time < t2) & (self.energies >= emin) & (self.energies < emax)])
+
+    def get(
+        self, use_pif: Optional[bool] = None, pif_threshold: Optional[float] = None
+    ) -> Tuple[
+        NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]
+    ]:
+        """
+        Returns the time, energies, dety, detz, weights arrays with filtering above PIF threshold applied.
+        Args:
+            use_pif (bool, optional): Override instance use_pif setting
+            pif_threshold (float, optional): Override instance pif_threshold setting
+        """
+        weights = self._get_weights(use_pif, pif_threshold)
+        mask = weights > 0.0
+        return (
+            self.time[mask],
+            self.energies[mask],
+            self.dety[mask],
+            self.detz[mask],
+            weights[mask],
+        )
 
     def ijd2loc(self, ijd_time: Union[float, NDArray[np.float64]]) -> Union[float, NDArray[np.float64]]:
         """
