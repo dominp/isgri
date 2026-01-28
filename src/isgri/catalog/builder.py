@@ -361,18 +361,22 @@ class CatalogBuilder:
         Notes
         -----
         Checks for existence of 'isgri_events.fits.gz' in each ScW directory.
-        Prints progress every 100 ScWs.
         """
-        valid_swids, valid_paths = [], []
-        print("Checking for event files...")
-        for idx, (swid, path) in enumerate(zip(swids, swid_paths)):
+
+        def check_file(swid, path):
             event_file = os.path.join(path, "isgri_events.fits.gz")
-            if os.path.exists(event_file):
-                valid_swids.append(swid)
-                valid_paths.append(event_file)
-            if (idx + 1) % 100 == 0:
-                print(f"Checked {idx + 1}/{len(swids)} ScWs...", end="\r")
-        return np.array(valid_swids), np.array(valid_paths)
+            return (swid, event_file) if os.path.exists(event_file) else None
+
+        print("Checking for event files...")
+        results = Parallel(n_jobs=self.n_cores, backend="threading")(
+            delayed(check_file)(swid, path) for swid, path in zip(swids, swid_paths)
+        )
+
+        valid_data = [r for r in results if r is not None]
+        if valid_data:
+            valid_swids, valid_paths = zip(*valid_data)
+            return np.array(valid_swids), np.array(valid_paths)
+        return np.array([]), np.array([])
 
     def update_catalog(self):
         """Update catalog with new science windows from archive.
