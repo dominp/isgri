@@ -98,12 +98,10 @@ class Config:
             If configured path doesn't exist
         """
         path_str = self.config.get("catalog_path")
-        if not path_str:
-            return None
+        if path_str:
+            return Path(path_str)
+        return None
         path = Path(path_str)
-        if not path.exists():
-            raise FileNotFoundError(f"Catalog path does not exist: {path}")
-        return path
 
     def save(self):
         """Save current config to file."""
@@ -140,7 +138,7 @@ class Config:
         catalog_path : Path, optional
             New catalog path
         """
-        if archive_path:
+        if archive_path:                
             self.config["archive_path"] = str(archive_path)
         if catalog_path:
             self.config["catalog_path"] = str(catalog_path)

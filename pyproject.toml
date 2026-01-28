@@ -17,6 +17,7 @@ dependencies = [
     "platformdirs",
     "tomli>=2.0.0; python_version<'3.11'",
     "tomli-w",
+    "joblib",
 ]
 
 [tool.setuptools.packages.find]
