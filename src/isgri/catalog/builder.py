@@ -224,6 +224,10 @@ class CatalogBuilder:
 
         Light curves are binned at 1 second resolution in 15-1000 keV band.
         """
+        event_file = os.path.join(path, "isgri_events.fits.gz")
+        if not os.path.exists(event_file):
+            return None, None
+
         lc = LightCurve.load_data(path)
 
         time, full_counts = lc.rebin(1, emin=15, emax=1000, local_time=False)
@@ -302,7 +306,7 @@ class CatalogBuilder:
         data = Parallel(n_jobs=self.n_cores, backend="multiprocessing")(
             delayed(self._process_scw)(path) for path in rev_paths
         )
-        table_data_list, array_data_dicts = zip(*data)
+        table_data_list, array_data_dicts = zip(*[d for d in data if d[0] is not None])
 
         dtype = [("SWID", "U16"), ("TIME", "O"), ("COUNTS", "O"), ("MODULE_COUNTS", "O"), ("GTIS", "O")]
         array_data = np.empty(len(array_data_dicts), dtype=dtype)
@@ -406,14 +410,14 @@ class CatalogBuilder:
         print(f"Found {len(scws_in_archive)} ScWs in archive.")
         scws_in_catalog = np.array(self.catalog["SWID"], dtype=str)
         mask = np.isin(scws_in_archive, scws_in_catalog, invert=True)
-        new_scws = scws_in_archive[mask]
-        new_paths = scws_paths[mask]
-        print(f"Found {len(new_scws)} new ScWs not in catalog.")
-        to_process_scws, to_process_paths = self.find_event_files(new_scws, new_paths)
-        print(f"{len(to_process_scws)} ScWs have event files and will be processed.")
-        if len(to_process_scws) == 0:
-            print("Exiting.")
-            return
+        to_process_scws = scws_in_archive[mask]
+        to_process_paths = scws_paths[mask]
+        print(f"{len(to_process_scws)} ScWs not in catalog.")
+        # to_process_scws, to_process_paths = self.find_event_files(new_scws, new_paths)
+        # print(f"{len(to_process_scws)} ScWs have event files and will be processed.")
+        # if len(to_process_scws) == 0:
+        #     print("Exiting.")
+        #     return
 
         revolutions = defaultdict(list)
         for swid, path in zip(to_process_scws, to_process_paths):
@@ -422,6 +426,7 @@ class CatalogBuilder:
         for revolution, rev_paths in revolutions.items():
             print(f"Processing revolution {revolution} with {len(rev_paths)} ScWs...")
             table_data_rows, array_data_list = self._process_rev(rev_paths)
+            print(f"Adding {len(table_data_rows)} ScWs from revolution {revolution} to catalog.")
             self._add_catalog_data(table_data_rows)
             if self.lightcurve_cache is not None:
                 self._add_array_data(revolution, array_data_list)
