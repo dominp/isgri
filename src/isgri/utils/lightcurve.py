@@ -32,8 +32,16 @@ from numpy.typing import NDArray
 from typing import Optional, Union, Tuple, List
 from pathlib import Path
 import os
-from .file_loaders import load_isgri_events, load_isgri_pif, default_pif_metadata, merge_metadata
+from .file_loaders import (
+    resolve_event_path,
+    load_isgri_events,
+    resolve_pif_path,
+    load_isgri_pif,
+    default_pif_metadata,
+    merge_metadata,
+)
 from .pif import DETZ_BOUNDS, DETY_BOUNDS
+from ..config import Config
 
 
 class LightCurve:
@@ -145,7 +153,7 @@ class LightCurve:
         cls,
         events_path: Optional[Union[str, Path]] = None,
         pif_path: Optional[Union[str, Path]] = None,
-        scw: Optional[str] = None,
+        swid: Optional[str] = None,
         source: Optional[str] = None,
         use_pif: bool = True,
         pif_threshold: float = 0.5,
@@ -157,7 +165,7 @@ class LightCurve:
         Args:
             events_path (str): The path to the events file or directory.
             pif_path (str, optional): The path to the PIF file. Defaults to None.
-            scw (str, optional): SCW identifier for auto-path resolution. Defaults to None.
+            swid (str, optional): Science Window ID for auto-path resolution. Defaults to None.
             source (str, optional): Source name for auto-path resolution. Defaults to None.
             pif_threshold (float, optional): The PIF threshold value. Defaults to 0.5.
             pif_extension (int, optional): PIF file extension index. Defaults to -1.
@@ -165,11 +173,17 @@ class LightCurve:
         Returns:
             LightCurve: An instance of the LightCurve class.
         """
-        events, gtis, metadata = load_isgri_events(events_path)
-        if pif_path:
+        if swid is not None or source is not None:
+            cfg = Config()
+        else:
+            cfg = None
+
+        confirmed_events_path = resolve_event_path(events_path, swid, cfg)
+        events, gtis, metadata = load_isgri_events(confirmed_events_path)
+        if pif_path is not None or source is not None:
             if pif_threshold < 0 or pif_threshold > 1:
                 raise ValueError(f"pif_threshold must be in [0, 1], got {pif_threshold}")
-
+            pif_path = resolve_pif_path(pif_path, source, metadata["SWID"], cfg)
             events, weights, metadata_pif = load_isgri_pif(pif_path, events, pif_extension)
         else:
             weights = np.ones(len(events))

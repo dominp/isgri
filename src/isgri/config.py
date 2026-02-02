@@ -32,6 +32,8 @@ class Config:
         Path to INTEGRAL archive directory
     catalog_path : Path or None
         Path to catalog FITS file (validated on access)
+    pif_path : Path or None
+        Path to PIF file
     """
 
     DEFAULT_PATH = Path(user_config_dir("isgri")) / "config.toml"
@@ -101,7 +103,21 @@ class Config:
         if path_str:
             return Path(path_str)
         return None
-        path = Path(path_str)
+
+    @property
+    def pif_path(self) -> Optional[Path]:
+        """
+        Get PIF path from config.
+
+        Returns
+        -------
+        Path or None
+            Path to PIF file
+        """
+        path_str = self.config.get("pif_path")
+        if path_str:
+            return Path(path_str)
+        return None
 
     def save(self):
         """Save current config to file."""
@@ -109,7 +125,9 @@ class Config:
         with open(self.path, "wb") as f:
             tomli_w.dump(self._config or {}, f)
 
-    def create_new(self, archive_path: Optional[Path] = None, catalog_path: Optional[Path] = None):
+    def create_new(
+        self, archive_path: Optional[Path] = None, catalog_path: Optional[Path] = None, pif_path: Optional[Path] = None
+    ):
         """
         Create new config file with given paths.
 
@@ -119,15 +137,21 @@ class Config:
             Path to archive directory
         catalog_path : Path, optional
             Path to catalog FITS file
+        pif_path : Path, optional
+            Path to PIF file
         """
         self._config = {}
         if archive_path:
             self._config["archive_path"] = str(archive_path)
         if catalog_path:
             self._config["catalog_path"] = str(catalog_path)
+        if pif_path:
+            self._config["pif_path"] = str(pif_path)
         self.save()
 
-    def set(self, archive_path: Optional[Path] = None, catalog_path: Optional[Path] = None):
+    def set(
+        self, archive_path: Optional[Path] = None, catalog_path: Optional[Path] = None, pif_path: Optional[Path] = None
+    ):
         """
         Update config paths and save.
 
@@ -137,13 +161,19 @@ class Config:
             New archive directory path
         catalog_path : Path, optional
             New catalog path
+        pif_path : Path, optional
+            New PIF path
         """
-        if archive_path:                
+        if archive_path:
             self.config["archive_path"] = str(archive_path)
         if catalog_path:
             self.config["catalog_path"] = str(catalog_path)
+        if pif_path:
+            self.config["pif_path"] = str(pif_path)
 
         self.save()
 
     def __repr__(self):
-        return f"Config(path={self.path}, archive={self.archive_path}, catalog={self.catalog_path})"
+        return (
+            f"Config(path={self.path}, archive={self.archive_path}, catalog={self.catalog_path}, pif={self.pif_path})"
+        )

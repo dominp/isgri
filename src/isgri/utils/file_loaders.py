@@ -44,17 +44,102 @@ from typing import Tuple, Dict, Optional, Union
 from pathlib import Path
 import os
 from .pif import coding_fraction, estimate_active_modules
+from ..config import Config
 
 
-def verify_events_path(path: Union[str, Path]) -> str:
+def resolve_pif_path(
+    pif_path: Optional[Union[str, Path]] = None,
+    source: Optional[str] = None,
+    swid: Optional[str] = None,
+    config: Optional[Config] = None,
+) -> str:
+    """
+    Resolve PIF file path based on input or source name.
+
+    Parameters
+    ----------
+    pif_path : str or Path, optional
+        Direct path to PIF file.
+    source : str, optional
+        Source name to construct default PIF path.
+    swid : str, optional
+        Science Window ID
+    config : Config, optional
+        Configuration object containing pif_path.
+
+    Returns
+    -------
+    resolved_path : str
+        Resolved absolute path to PIF file.
+
+    Raises
+    ------
+    FileNotFoundError
+        If PIF file not found.
+
+    Notes
+    -----
+    - If both pif_path and source are provided, pif_path takes precedence.
+    - If neither is provided, raises ValueError.
+    """
+    if pif_path is not None:
+        path = Path(pif_path)
+        if path.is_file():
+            return str(path)
+        if not path.is_dir():
+            raise FileNotFoundError(f"PIF path is not a directory: {path}")
+
+    elif config is not None and config.pif_path is not None:
+        path = Path(config.pif_path)
+        if not path.is_dir():
+            raise FileNotFoundError(f"PIF path from config is not a directory: {path}")
+    else:
+        raise ValueError("Either pif_path must be provided here or in config.")
+
+    if swid is None:
+        raise ValueError("swid must be provided to resolve PIF file name.")
+
+    if source is not None:
+        candidate_path = path / source
+        if candidate_path.is_dir():
+            path = candidate_path
+
+    revol = swid[:4]
+    revol_dir = path / revol
+    if revol_dir.is_dir():
+        path = revol_dir
+
+    candidate_files = [f for f in os.listdir(path) if f.startswith(swid)]
+    if len(candidate_files) == 0:
+        raise FileNotFoundError(f"No PIF file found for SWID {swid} in directory: {path}")
+    elif len(candidate_files) > 1:
+        raise FileNotFoundError(
+            f"Multiple PIF files found for SWID {swid} in directory: {path}\n"
+            f"Found: {candidate_files}\n"
+            "Please specify the exact file path."
+        )
+    resolved_path = path / candidate_files[0]
+    if not resolved_path.is_file():
+        raise FileNotFoundError(f"PIF file not found: {resolved_path}")
+
+    return str(resolved_path)
+
+
+def resolve_event_path(
+    events_path: Optional[Union[str, Path]] = None, swid: Optional[str] = None, config: Optional[Config] = None
+) -> str:
     """
     Verify and resolve the events file path.
 
     Parameters
     ----------
-    path : str or Path
+    events_path : str or Path, optional
         File path or directory path containing events file.
         If directory, searches for files containing 'isgri_events'.
+    swid : str, optional
+        Science Window ID to construct default event path. Requires events_path to be None and defined archive_path in Config.
+    config : Config, optional
+        Configuration object containing archive_path.
 
     Returns
     -------
@@ -80,16 +165,34 @@ def verify_events_path(path: Union[str, Path]) -> str:
     >>> # Will raise error if multiple files
     >>> verify_events_path("/data/scw/")  # Multiple SCWs present
     FileNotFoundError: Multiple isgri_events files found...
+
+    Notes
+    -----
+    - If both events_path and swid are provided, events_path takes precedence.
+    - If neither is provided, raises ValueError.
+    - Using swid requires archive_path in Config and constructs path as:
+      {archive_path}/{revol}/{swid}/isgri_events.fits.gz
     """
-    path = Path(path)
+    if events_path is not None:
+        path = Path(events_path)
+        if path.is_file():
+            return verify_events_file(path)
+        elif not path.is_dir():
+            raise FileNotFoundError(f"Events path does not exist: {path}")
+    elif config is not None and swid is not None:
+        if config.archive_path is None:
+            raise ValueError("archive_path must be defined in config to resolve events path using swid.")
+        path = Path(config.archive_path)
+        if not path.is_dir():
+            raise FileNotFoundError(f"Archive path from config is not a directory: {path}")
+    else:
+        raise ValueError("Either events_path must be provided here or in config along with swid.")
 
-    if path.is_file():
-        resolved_path = str(path)
-    elif path.is_dir():
+    if swid is None:
         candidate_files = [f for f in os.listdir(path) if "isgri_events" in f]
-
-        if len(candidate_files) == 0:
-            raise FileNotFoundError(f"No isgri_events file found in directory: {path}")
+        if len(candidate_files) == 1:
+            resolved_path = path / candidate_files[0]
+            return verify_events_file(resolved_path)
         elif len(candidate_files) > 1:
             raise FileNotFoundError(
                 f"Multiple isgri_events files found in directory: {path}\n"
@@ -97,21 +200,68 @@ def verify_events_path(path: Union[str, Path]) -> str:
                 "Please specify the exact file path."
             )
         else:
-            resolved_path = str(path / candidate_files[0])
-    else:
-        raise FileNotFoundError(f"Path does not exist: {path}")
+            raise FileNotFoundError(f"No isgri_events file found in directory: {path}")
 
-    # Verify FITS structure
+    revol = swid[:4]
+    revol_dir = path / revol
+    if revol_dir.is_dir():
+        path = revol_dir
+    candidate_dirs = [d for d in os.listdir(path) if d.startswith(swid) and (path / d).is_dir()]
+    if len(candidate_dirs) == 1:
+        path = path / candidate_dirs[0]
+    elif len(candidate_dirs) > 1:
+        raise FileNotFoundError(
+            f"Multiple directories found for SWID {swid} in directory: {path}\n"
+            f"Found: {candidate_dirs}\n"
+            "Please specify the exact file path."
+        )
+    else:
+        raise FileNotFoundError(f"No directory found for SWID {swid} in directory: {path}")
+
+    candidate_files = [f for f in os.listdir(path) if "isgri_events" in f]
+
+    if len(candidate_files) == 0:
+        raise FileNotFoundError(f"No isgri_events file found in directory: {path}")
+    elif len(candidate_files) > 1:
+        raise FileNotFoundError(
+            f"Multiple isgri_events files found in directory: {path}\n"
+            f"Found: {candidate_files}\n"
+            "Please specify the exact file path."
+        )
+    else:
+        resolved_path = str(path / candidate_files[0])
+
+    return verify_events_file(resolved_path)
+
+
+def verify_events_file(events_path: Union[str, Path]) -> str:
+    """
+    Verify that the provided events file path is valid.
+    Parameters
+    ----------
+    events_path : str or Path
+        Path to events FITS file.
+    Returns
+    -------
+    str
+        Validated absolute path to events FITS file.
+    Raises
+    ------
+    FileNotFoundError
+        If events file not found.
+    ValueError
+        If required FITS extension missing.
+    """
+
     try:
-        with fits.open(resolved_path) as hdu:
+        with fits.open(events_path) as hdu:
             if "ISGR-EVTS-ALL" not in hdu:
-                raise ValueError(f"Invalid events file: ISGR-EVTS-ALL extension not found in {resolved_path}")
+                raise ValueError(f"Invalid events file: ISGR-EVTS-ALL extension not found in {events_path}")
     except Exception as e:
         if isinstance(e, (FileNotFoundError, ValueError)):
             raise
-        raise ValueError(f"Cannot open FITS file {resolved_path}: {e}")
-
-    return resolved_path
+        raise ValueError(f"Cannot open FITS file {events_path}: {e}")
+    return str(events_path)
 
 
 def load_isgri_events(events_path: Union[str, Path]) -> Tuple[Table, NDArray[np.float64], Dict]:
@@ -165,9 +315,8 @@ def load_isgri_events(events_path: Union[str, Path]) -> Tuple[Table, NDArray[np.
     --------
     load_isgri_pif : Apply detector response weighting
     """
-    confirmed_path = verify_events_path(events_path)
 
-    with fits.open(confirmed_path) as hdu:
+    with fits.open(events_path) as hdu:
         # Load events
         events_data = hdu["ISGR-EVTS-ALL"].data
         header = hdu["ISGR-EVTS-ALL"].header

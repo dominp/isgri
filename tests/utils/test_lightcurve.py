@@ -3,7 +3,10 @@ import numpy as np
 from astropy.io import fits
 import tempfile
 import os
+import shutil
+from pathlib import Path
 from isgri.utils.lightcurve import LightCurve
+from isgri.config import Config
 
 
 @pytest.fixture
@@ -33,6 +36,7 @@ def mock_events_file():
         hdu.header["SWID"] = "100000100010"
         hdu.header["TSTART"] = 0.0
         hdu.header["TSTOP"] = 100.0
+        hdu.header["NAXIS2"] = n_events
         hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
         hdul.writeto(f.name, overwrite=True)
         filepath = f.name
@@ -41,8 +45,45 @@ def mock_events_file():
     os.unlink(filepath)
 
 
+@pytest.fixture
+def mock_archive_structure(tmp_path, mock_events_file):
+    revol_dir = tmp_path / "1000"
+    revol_dir.mkdir()
+
+    swid_dir = revol_dir / "100000100010.001"
+    swid_dir.mkdir()
+
+    events_file = swid_dir / "isgri_events.fits.gz"
+    shutil.copy(mock_events_file, events_file)
+
+    return tmp_path, revol_dir, swid_dir, events_file
+
+
+@pytest.fixture
+def mock_pif_structure(tmp_path):
+    source_dir = tmp_path / "Crab"
+    source_dir.mkdir()
+
+    revol_dir = source_dir / "1000"
+    revol_dir.mkdir()
+
+    pif_file = revol_dir / "100000100010_pif.fits"
+    pif_data = np.ones((134, 130), dtype=np.float32) * 0.8
+    hdu = fits.ImageHDU(data=pif_data, name="ISGR-PIF.-ima")
+    hdu.header["SOURCE"] = "Crab"
+    hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
+    hdul.writeto(pif_file)
+
+    return tmp_path, source_dir, revol_dir, pif_file
+
+
+@pytest.fixture
+def mock_config(tmp_path):
+    config_file = tmp_path / "test_config.toml"
+    return Config(path=config_file)
+
+
 def test_lightcurve_load_from_file(mock_events_file):
-    """Test loading LightCurve from FITS file."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     assert isinstance(lc, LightCurve)
@@ -53,8 +94,73 @@ def test_lightcurve_load_from_file(mock_events_file):
     assert lc.metadata is not None
 
 
+def test_lightcurve_load_with_swid(mock_archive_structure, mock_config, monkeypatch):
+    tmp_path, revol_dir, swid_dir, events_file = mock_archive_structure
+
+    mock_config.create_new(archive_path=tmp_path)
+
+    monkeypatch.setattr("isgri.utils.lightcurve.Config", lambda: mock_config)
+
+    lc = LightCurve.load_data(swid="100000100010")
+
+    assert isinstance(lc, LightCurve)
+    assert len(lc.time) > 0
+    assert lc.metadata["SWID"] == "100000100010"
+
+
+def test_lightcurve_load_with_swid_and_source(tmp_path, mock_events_file, mock_config, monkeypatch):
+    revol_dir = tmp_path / "archive" / "1000"
+    revol_dir.mkdir(parents=True)
+
+    swid_dir = revol_dir / "100000100010.001"
+    swid_dir.mkdir()
+
+    events_file = swid_dir / "isgri_events.fits.gz"
+    shutil.copy(mock_events_file, events_file)
+
+    pif_base = tmp_path / "pif"
+    source_dir = pif_base / "Crab"
+    source_dir.mkdir(parents=True)
+
+    pif_revol_dir = source_dir / "1000"
+    pif_revol_dir.mkdir()
+
+    pif_file = pif_revol_dir / "100000100010_pif.fits"
+    pif_data = np.ones((134, 130), dtype=np.float32) * 0.8
+    hdu = fits.ImageHDU(data=pif_data, name="ISGR-PIF.-ima")
+    hdu.header["SOURCE"] = "Crab"
+    hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
+    hdul.writeto(pif_file)
+
+    mock_config.create_new(archive_path=tmp_path / "archive", pif_path=pif_base)
+
+    monkeypatch.setattr("isgri.utils.lightcurve.Config", lambda: mock_config)
+
+    lc = LightCurve.load_data(swid="100000100010", source="Crab", use_pif=True, pif_threshold=0.5)
+
+    assert isinstance(lc, LightCurve)
+    assert len(lc.time) > 0
+    assert lc.metadata["SWID"] == "100000100010"
+    assert not np.all(lc.weights == 1.0)
+
+
+def test_lightcurve_load_with_source_no_swid(mock_pif_structure, mock_config, monkeypatch):
+    pif_path, source_dir, pif_revol_dir, pif_file = mock_pif_structure
+
+    mock_config.create_new(pif_path=pif_path)
+
+    monkeypatch.setattr("isgri.utils.lightcurve.Config", lambda: mock_config)
+
+    with pytest.raises(ValueError):
+        LightCurve.load_data(source="Crab")
+
+
+def test_lightcurve_load_swid_no_config():
+    with pytest.raises((ValueError, FileNotFoundError)):
+        LightCurve.load_data(swid="100000100010")
+
+
 def test_lightcurve_metadata(mock_events_file):
-    """Test metadata extraction."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     assert lc.metadata["REVOL"] == 1000
@@ -64,7 +170,6 @@ def test_lightcurve_metadata(mock_events_file):
 
 
 def test_lightcurve_rebin_basic(mock_events_file):
-    """Test basic rebinning."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     time, counts = lc.rebin(binsize=1.0, emin=30, emax=300)
@@ -76,7 +181,6 @@ def test_lightcurve_rebin_basic(mock_events_file):
 
 
 def test_lightcurve_rebin_energy_filter(mock_events_file):
-    """Test rebinning with energy filtering."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     time1, counts1 = lc.rebin(binsize=1.0, emin=50, emax=100)
@@ -86,20 +190,18 @@ def test_lightcurve_rebin_energy_filter(mock_events_file):
 
 
 def test_lightcurve_rebin_by_modules(mock_events_file):
-    """Test rebinning by detector modules."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     time, counts = lc.rebin_by_modules(binsize=1.0, emin=30, emax=300)
 
     assert len(time) > 0
-    assert len(counts) == 8  # 8 modules
+    assert len(counts) == 8
     for module_counts in counts:
         assert len(module_counts) == len(time)
         assert np.all(module_counts >= 0)
 
 
 def test_lightcurve_rebin_modules_vs_full_detector(mock_events_file):
-    """Test that sum of module lightcurves equals full detector lightcurve."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     time_modules, counts_modules = lc.rebin_by_modules(binsize=1.0, emin=30, emax=300)
@@ -112,7 +214,6 @@ def test_lightcurve_rebin_modules_vs_full_detector(mock_events_file):
 
 
 def test_lightcurve_time_conversion_ijd2loc(mock_events_file):
-    """Test IJD to local time conversion."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     local = lc.ijd2loc(lc.time[:10])
@@ -123,10 +224,9 @@ def test_lightcurve_time_conversion_ijd2loc(mock_events_file):
 
 
 def test_lightcurve_time_conversion_loc2ijd(mock_events_file):
-    """Test local time to IJD conversion."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
-    local = np.array([0, 10, 50])  # seconds
+    local = np.array([0, 10, 50])
     ijd = lc.loc2ijd(local)
 
     assert len(ijd) == 3
@@ -134,7 +234,6 @@ def test_lightcurve_time_conversion_loc2ijd(mock_events_file):
 
 
 def test_lightcurve_time_conversion_roundtrip(mock_events_file):
-    """Test time conversion round trip."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     ijd_original = lc.time[:10]
@@ -145,7 +244,6 @@ def test_lightcurve_time_conversion_roundtrip(mock_events_file):
 
 
 def test_lightcurve_cts_method(mock_events_file):
-    """Test cts() count extraction."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     counts = lc.cts(0, 100, emin=30, emax=300)
@@ -155,7 +253,6 @@ def test_lightcurve_cts_method(mock_events_file):
 
 
 def test_lightcurve_cts_time_range(mock_events_file):
-    """Test cts() with different time ranges."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     counts_full = lc.cts(0, 100, emin=30, emax=300)
@@ -166,28 +263,23 @@ def test_lightcurve_cts_time_range(mock_events_file):
 
 
 def test_lightcurve_gtis(mock_events_file):
-    """Test GTI handling."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     assert lc.gtis is None
 
 
 def test_lightcurve_pif_default(mock_events_file):
-    """Test default PIF behavior (no PIF file)."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
-    # Without PIF file, all events should have PIF=1
     assert np.all(lc.weights == 1.0)
 
 
 def test_lightcurve_invalid_file():
-    """Test loading from invalid path."""
     with pytest.raises(FileNotFoundError):
         LightCurve.load_data(events_path="/nonexistent/file.fits")
 
 
 def test_lightcurve_rebin_invalid_energy(mock_events_file):
-    """Test rebinning with invalid energy range."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     with pytest.raises(ValueError):
@@ -195,10 +287,9 @@ def test_lightcurve_rebin_invalid_energy(mock_events_file):
 
 
 def test_lightcurve_rebin_custom_bins(mock_events_file):
-    """Test rebinning with custom bin edges."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
-    custom_bins = [0, 10, 25, 50, 100]  # seconds
+    custom_bins = [0, 10, 25, 50, 100]
     time, counts = lc.rebin(binsize=custom_bins, emin=30, emax=300)
 
     assert len(time) == len(custom_bins) - 1
@@ -207,10 +298,9 @@ def test_lightcurve_rebin_custom_bins(mock_events_file):
 
 
 def test_lightcurve_rebin_with_custom_mask(mock_events_file):
-    """Test rebinning with custom event mask."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
-    custom_mask = np.ones(len(lc.time), dtype=bool)  # exclude first half of events
+    custom_mask = np.ones(len(lc.time), dtype=bool)
     custom_mask[: len(lc.time) // 2] = False
 
     time_masked, counts_masked = lc.rebin(binsize=1.0, emin=30, emax=300, custom_mask=custom_mask)
@@ -220,9 +310,7 @@ def test_lightcurve_rebin_with_custom_mask(mock_events_file):
 
 
 def test_lightcurve_module_assignment():
-    """Test that events are correctly assigned to detector modules."""
-    # Create synthetic events with DIFFERENT counts per module to verify assignment
-    module_counts_expected = [10, 25, 50, 75, 100, 125, 150, 200]  # Different for each module
+    module_counts_expected = [10, 25, 50, 75, 100, 125, 150, 200]
     n_events = sum(module_counts_expected)
 
     events = np.zeros(
@@ -236,19 +324,15 @@ def test_lightcurve_module_assignment():
         ],
     )
 
-    # Module layout: 0 1
-    #                2 3
-    #                4 5
-    #                6 7
     module_positions = [
-        (16, 32),  # Module 0: DETZ [0-32),   DETY [0-64)
-        (16, 96),  # Module 1: DETZ [0-32),   DETY [64-130)
-        (48, 32),  # Module 2: DETZ [32-66),  DETY [0-64)
-        (48, 96),  # Module 3: DETZ [32-66),  DETY [64-130)
-        (80, 32),  # Module 4: DETZ [66-100), DETY [0-64)
-        (80, 96),  # Module 5: DETZ [66-100), DETY [64-130)
-        (116, 32),  # Module 6: DETZ [100-134), DETY [0-64)
-        (116, 96),  # Module 7: DETZ [100-134), DETY [64-130)
+        (16, 32),
+        (16, 96),
+        (48, 32),
+        (48, 96),
+        (80, 32),
+        (80, 96),
+        (116, 32),
+        (116, 96),
     ]
 
     idx = 0
@@ -258,12 +342,11 @@ def test_lightcurve_module_assignment():
         events["DETZ"][idx : idx + n_events_module] = detz
         events["DETY"][idx : idx + n_events_module] = dety
         events["TIME"][idx : idx + n_events_module] = np.linspace(0, 10 / 86400, n_events_module)
-        events["ISGRI_ENERGY"][idx : idx + n_events_module] = 100  # All same energy
+        events["ISGRI_ENERGY"][idx : idx + n_events_module] = 100
         events["SELECT_FLAG"][idx : idx + n_events_module] = 0
 
         idx += n_events_module
 
-    # Create LightCurve
     time = events["TIME"]
     energies = events["ISGRI_ENERGY"]
     dety = events["DETY"]
@@ -274,10 +357,8 @@ def test_lightcurve_module_assignment():
 
     lc = LightCurve(time, energies, gtis, dety, detz, weights, metadata)
 
-    # Rebin by modules (1 bin covering all time)
     times, counts = lc.rebin_by_modules(binsize=20.0, emin=50, emax=200, local_time=True)
 
-    # Verify each module has the expected count
     for module_no, expected_count in enumerate(module_counts_expected):
         actual_count = counts[module_no][0]
         assert actual_count == expected_count, (
@@ -350,7 +431,6 @@ def mock_events_with_pif_coords():
 
 
 def test_lightcurve_pif_loading(mock_events_with_pif_coords, mock_pif_file):
-    """Test PIF weights loaded correctly."""
     lc = LightCurve.load_data(
         events_path=mock_events_with_pif_coords, pif_path=mock_pif_file, use_pif=True, pif_threshold=0.5
     )
@@ -364,7 +444,6 @@ def test_lightcurve_pif_loading(mock_events_with_pif_coords, mock_pif_file):
 
 
 def test_lightcurve_pif_rebin(mock_events_with_pif_coords, mock_pif_file):
-    """Test rebinning with PIF threshold."""
     lc = LightCurve.load_data(
         events_path=mock_events_with_pif_coords, pif_path=mock_pif_file, use_pif=True, pif_threshold=0.5
     )
@@ -374,7 +453,6 @@ def test_lightcurve_pif_rebin(mock_events_with_pif_coords, mock_pif_file):
 
 
 def test_lightcurve_pif_threshold_override(mock_events_with_pif_coords, mock_pif_file):
-    """Test overriding PIF threshold."""
     lc = LightCurve.load_data(
         events_path=mock_events_with_pif_coords, pif_path=mock_pif_file, use_pif=True, pif_threshold=0.5
     )
@@ -387,7 +465,6 @@ def test_lightcurve_pif_threshold_override(mock_events_with_pif_coords, mock_pif
 
 
 def test_lightcurve_pif_toggle(mock_events_with_pif_coords, mock_pif_file):
-    """Test toggling PIF on/off."""
     lc = LightCurve.load_data(
         events_path=mock_events_with_pif_coords, pif_path=mock_pif_file, use_pif=True, pif_threshold=0.5
     )
@@ -400,7 +477,6 @@ def test_lightcurve_pif_toggle(mock_events_with_pif_coords, mock_pif_file):
 
 
 def test_lightcurve_pif_instance_settings(mock_events_with_pif_coords, mock_pif_file):
-    """Test changing instance PIF settings."""
     lc = LightCurve.load_data(
         events_path=mock_events_with_pif_coords, pif_path=mock_pif_file, use_pif=True, pif_threshold=0.5
     )
@@ -418,7 +494,6 @@ def test_lightcurve_pif_instance_settings(mock_events_with_pif_coords, mock_pif_
 
 
 def test_lightcurve_pif_caching(mock_events_with_pif_coords, mock_pif_file):
-    """Test weight caching."""
     lc = LightCurve.load_data(
         events_path=mock_events_with_pif_coords, pif_path=mock_pif_file, use_pif=True, pif_threshold=0.5
     )
@@ -432,7 +507,6 @@ def test_lightcurve_pif_caching(mock_events_with_pif_coords, mock_pif_file):
 
 
 def test_lightcurve_pif_get_method(mock_events_with_pif_coords, mock_pif_file):
-    """Test get() method with PIF."""
     lc = LightCurve.load_data(
         events_path=mock_events_with_pif_coords, pif_path=mock_pif_file, use_pif=True, pif_threshold=0.5
     )
@@ -451,7 +525,6 @@ def test_lightcurve_pif_get_method(mock_events_with_pif_coords, mock_pif_file):
 
 
 def test_lightcurve_pif_rebin_by_modules(mock_events_with_pif_coords, mock_pif_file):
-    """Test PIF in rebin_by_modules."""
     lc = LightCurve.load_data(
         events_path=mock_events_with_pif_coords, pif_path=mock_pif_file, use_pif=True, pif_threshold=0.5
     )
@@ -467,7 +540,6 @@ def test_lightcurve_pif_rebin_by_modules(mock_events_with_pif_coords, mock_pif_f
 
 
 def test_lightcurve_pif_cts(mock_events_with_pif_coords, mock_pif_file):
-    """Test PIF in cts method."""
     lc = LightCurve.load_data(
         events_path=mock_events_with_pif_coords, pif_path=mock_pif_file, use_pif=True, pif_threshold=0.5
     )
@@ -480,7 +552,6 @@ def test_lightcurve_pif_cts(mock_events_with_pif_coords, mock_pif_file):
 
 
 def test_lightcurve_no_pif_file(mock_events_file):
-    """Test loading without PIF file."""
     lc = LightCurve.load_data(events_path=mock_events_file)
 
     assert np.all(lc.weights == 1.0)
