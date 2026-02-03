@@ -55,10 +55,10 @@ def match_command(user_input):
     commands = {
         "time": ["time", "t"],
         "pos": ["pos", "position", "p"],
-        "quality": ["quality", "qual", "q"],
-        "revolution": ["revolution", "rev", "r"],
+        "quality": ["quality", "qual"],
+        "revolution": ["revolution", "rev"],
         "show": ["show", "s", "display"],
-        "reset": ["reset", "clear"],
+        "reset": ["reset", "clear", "r"],
         "save": ["save", "write"],
         "help": ["help", "h", "?"],
         "exit": ["exit", "quit", "q"],
@@ -77,7 +77,20 @@ def match_command(user_input):
 
 
 def query_direct(
-    catalog_path, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revolution, output, list_swids, count
+    catalog_path,
+    tstart,
+    tstop,
+    ra,
+    dec,
+    radius,
+    fov,
+    max_chi,
+    chi_type,
+    revolution,
+    output,
+    list_swids,
+    count,
+    columns,
 ):
     try:
         q = ScwQuery(catalog_path)
@@ -108,7 +121,17 @@ def query_direct(
             click.echo(q.count())
 
         elif output:
-            q.write(output, overwrite=True, swid_only=list_swids)
+            col_list = None
+            if columns and not list_swids:
+                col_list = [c.strip() for c in columns.split(",")]
+                available = q.catalog.colnames
+                invalid = [c for c in col_list if c not in available]
+                if invalid:
+                    click.echo(f"Error: Invalid columns: {invalid}", err=True)
+                    click.echo(f"Available: {', '.join(available)}", err=True)
+                    raise click.Abort()
+
+            q.write(output, overwrite=True, swid_only=list_swids, columns=col_list)
             click.echo(f"Saved {q.count()} SCWs to {output}")
 
         else:
@@ -196,9 +219,33 @@ def query_interactive(catalog_path):
                 click.echo(f"→ {len(q.catalog)} SCWs")
             elif cmd == "save":
                 swid_only = click.confirm("Save only SWID list?", default=False)
+
+                col_list = None
+                if not swid_only:
+                    if click.confirm("Select specific columns?", default=False):
+                        click.echo("\nAvailable columns:")
+                        available = q.catalog.colnames
+                        for i, col in enumerate(available, 1):
+                            click.echo(f"  {i:2d}. {col}")
+
+                        click.echo("\nEnter column names (comma-separated) or leave empty for all:")
+                        col_input = click.prompt("Columns", default="", show_default=False)
+
+                        if col_input:
+                            col_list = [c.strip() for c in col_input.split(",")]
+                            invalid = [c for c in col_list if c not in available]
+                            if invalid:
+                                click.echo(f"Warning: Invalid columns ignored: {invalid}")
+                                col_list = [c for c in col_list if c in available]
+
+                            if not col_list:
+                                click.echo("No valid columns selected, using all")
+                                col_list = None
+
                 path = click.prompt("File")
-                q.write(path, overwrite=True, swid_only=swid_only)
-                click.echo(f"✓ Saved")
+                q.write(path, overwrite=True, swid_only=swid_only, columns=col_list)
+                click.echo(f"Saved {q.count()} SCWs to {path}")
+
             elif cmd is None:
                 click.echo(f"Unknown command: {user_input}. Type 'help' for available commands.")
             else:

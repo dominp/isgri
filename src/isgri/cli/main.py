@@ -30,7 +30,10 @@ def main():
 )
 @click.option("--list-swids", is_flag=True, help="Only output SWID list")
 @click.option("--count", is_flag=True, help="Only show count")
-def query(catalog, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revolution, output, list_swids, count):
+@click.option("--columns", help="Comma-separated list of columns to save (e.g., SWID,TSTART,TSTOP)")
+def query(
+    catalog, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revolution, output, list_swids, count, columns
+):
     """
     Query INTEGRAL science window catalog.
 
@@ -59,6 +62,10 @@ def query(catalog, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revol
 
             isgri query --tstart 3000 --tstop 3100 --output results.fits
 
+        Save specific columns:
+
+            isgri query --tstart 3000 --tstop 3100 --output results.fits --columns SWID,TSTART,TSTOP,CHI
+
         Get only SWID list:
 
             isgri query --tstart 3000 --tstop 3100 --list-swids
@@ -70,14 +77,26 @@ def query(catalog, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revol
     if catalog is None:
         cfg = Config()
         catalog = cfg.catalog_path
-
-        if not catalog:
-            click.echo("Error: No catalog configured", err=True)
+        if catalog is None:
+            click.echo("Error: No catalog path configured", err=True)
             raise click.Abort()
 
     if any(param is not None for param in [tstart, tstop, ra, dec, radius, max_chi, revolution]):
         query_direct(
-            catalog, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revolution, output, list_swids, count
+            catalog,
+            tstart,
+            tstop,
+            ra,
+            dec,
+            radius,
+            fov,
+            max_chi,
+            chi_type,
+            revolution,
+            output,
+            list_swids,
+            count,
+            columns,
         )
     else:
         query_interactive(catalog)
