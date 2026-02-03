@@ -4,6 +4,7 @@ from ..catalog import ScwQuery
 from ..__version__ import __version__
 from ..config import Config
 from .query import query_direct, query_interactive
+from .builder import update
 
 
 @click.group()
@@ -180,6 +181,8 @@ def config_set(archive, catalog, pif):
     click.echo()
     click.echo(f"Configuration saved to: {cfg.path}")
 
+
+main.add_command(update)
 
 if __name__ == "__main__":
     main()
