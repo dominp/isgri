@@ -9,6 +9,7 @@ Query catalogs directly from the terminal:
 - Interactive and direct query modes
 - Filter by time, position, quality, revolution
 - Export results to FITS/CSV or SWID lists
+- Update catalogs with new science windows from archive
 
 ### SCW Catalog Query
 Query INTEGRAL Science Window catalogs with a fluent Python API:
@@ -49,6 +50,9 @@ isgri config-set --archive /path/to/archive --catalog ~/data/scw_catalog.fits --
 
 # View current config
 isgri config
+
+# Update catalog from archive
+isgri update
 
 # Interactive catalog query
 isgri query
@@ -99,7 +103,25 @@ swids = cat.get_swids()
 print(f"Found {len(results)} observations")
 ```
 
-### Build SCW Catalog
+### Build/Update SCW Catalog
+
+#### Command Line
+
+```bash
+# Update catalog using configured paths
+isgri update
+
+# Update with custom paths
+isgri update --archive /anita/archivio/ --catalog ~/data/catalog.fits 
+
+# Enable light curve caching (15-1000 keV, 1s bins)
+isgri update --cache ~/data/lightcurves/
+
+# Limit CPU cores for parallel processing
+isgri update --cores 4
+```
+
+#### Python API
 
 ```python
 from isgri.catalog import CatalogBuilder
@@ -124,7 +146,7 @@ The builder:
 - Scans archive for new ScWs not in catalog
 - Computes quality metrics (raw, sigma-clipped, GTI-filtered chi-squared)
 - Processes in parallel by revolution
-- Optionally caches 1s light curves (15-1000 keV) for fast access
+- Optionally caches 1s light curves (15-1000 keV)
 
 ### Analyze Light Curves
 
