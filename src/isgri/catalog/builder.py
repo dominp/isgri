@@ -306,7 +306,14 @@ class CatalogBuilder:
         data = Parallel(n_jobs=self.n_cores, backend="multiprocessing")(
             delayed(self._process_scw)(path) for path in rev_paths
         )
-        table_data_list, array_data_dicts = zip(*[d for d in data if d[0] is not None])
+
+        # Filter out None results
+        valid_data = [d for d in data if d[0] is not None]
+
+        if not valid_data:
+            return None, None
+
+        table_data_list, array_data_dicts = zip(*valid_data)
 
         dtype = [("SWID", "U16"), ("TIME", "O"), ("COUNTS", "O"), ("MODULE_COUNTS", "O"), ("GTIS", "O")]
         array_data = np.empty(len(array_data_dicts), dtype=dtype)
@@ -426,6 +433,11 @@ class CatalogBuilder:
         for revolution, rev_paths in revolutions.items():
             print(f"Processing revolution {revolution} with {len(rev_paths)} ScWs...")
             table_data_rows, array_data_list = self._process_rev(rev_paths)
+
+            if table_data_rows is None:
+                print(f"No valid ScWs found in revolution {revolution}, skipping.")
+                continue
+
             print(f"Adding {len(table_data_rows)} ScWs from revolution {revolution} to catalog.")
             self._add_catalog_data(table_data_rows)
             if self.lightcurve_cache is not None:
