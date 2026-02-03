@@ -16,6 +16,13 @@ Query INTEGRAL Science Window catalogs with a fluent Python API:
 - Calculate detector offsets
 - Export results to any auto detectable astropy table extension or in table aligned data for any other extension
 
+### Catalog Builder
+Build and update INTEGRAL/ISGRI science window catalogs:
+- Automatic discovery of new science windows in archive
+- Parallel processing of quality metrics
+- Optional light curve caching
+- Incremental catalog updates
+
 ### Light Curve Analysis
 Extract and analyze ISGRI light curves:
 - Load from file paths or SWID/source lookup
@@ -91,6 +98,33 @@ swids = cat.get_swids()
 
 print(f"Found {len(results)} observations")
 ```
+
+### Build SCW Catalog
+
+```python
+from isgri.catalog import CatalogBuilder
+
+# Create builder instance
+builder = CatalogBuilder(
+    archive_path="/path/to/archive",
+    catalog_path="scw_catalog.fits",
+    lightcurve_cache="/path/to/cache",  # optional
+    n_cores=8
+)
+
+# Update catalog with new science windows
+builder.update_catalog()
+
+# Find all science windows in archive
+swids, paths = builder.find_scws()
+print(f"Found {len(swids)} science windows")
+```
+
+The builder:
+- Scans archive for new ScWs not in catalog
+- Computes quality metrics (raw, sigma-clipped, GTI-filtered chi-squared)
+- Processes in parallel by revolution
+- Optionally caches 1s light curves (15-1000 keV) for fast access
 
 ### Analyze Light Curves
 
