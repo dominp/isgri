@@ -6,19 +6,20 @@ Python toolkit for INTEGRAL/ISGRI data analysis.
 
 ### Command Line Interface
 Query catalogs directly from the terminal:
+- Interactive and direct query modes
 - Filter by time, position, quality, revolution
-- Export results to FITS/CSV
-- List SWIDs for batch processing
+- Export results to FITS/CSV or SWID lists
 
 ### SCW Catalog Query
 Query INTEGRAL Science Window catalogs with a fluent Python API:
 - Filter by time, position, quality, revolution
 - Calculate detector offsets
-- Export results to any auto detectable astropy table extension or in table aligned data for any other extension.
+- Export results to any auto detectable astropy table extension or in table aligned data for any other extension
 
 ### Light Curve Analysis
 Extract and analyze ISGRI light curves:
-- Event loading with PIF weighting
+- Load from file paths or SWID/source lookup
+- PIF weighting with adjustable thresholds
 - Custom time binning
 - Module-by-module analysis
 - Quality metrics (chi-squared tests)
@@ -37,18 +38,26 @@ pip install isgri
 
 ```bash
 # Configure default paths (once)
-isgri config-set --catalog ~/data/scw_catalog.fits
+isgri config-set --archive /path/to/archive --catalog ~/data/scw_catalog.fits --pif /path/to/pif
 
-# Interactive method
+# View current config
+isgri config
+
+# Interactive catalog query
 isgri query
+# query> time
+# Start: 2010-01-01
+# Stop: 2010-12-31
+# → 1234 SCWs
+# query> pos
+# RA: 83.63
+# Dec: 22.01
+# ...
 
-# Query by time range
-isgri query --tstart 2010-01-01 --tstop 2010-12-31
+# Direct catalog query
+isgri query --tstart 2010-01-01 --tstop 2010-12-31 --ra 83.63 --dec 22.01 --max-chi 2.0
 
-# Query Crab with quality cut
-isgri query --ra 83.63 --dec 22.01 --max-chi 2.0 --fov full
-
-# Get list of SWIDs for processing
+# Get SWID list for batch processing
 isgri query --tstart 3000 --tstop 3100 --list-swids > swids.txt
 
 # Export results
@@ -71,8 +80,14 @@ results = (cat
     .get()
 )
 
-# Save selected columns to the file
-cat.write('example_file.any_extension',columns=['SWID','TSTART','TSTOP'])
+# Filter by revolution(s)
+results = cat.revolution([1000, 1001, 1002]).get()
+
+# Save selected columns
+cat.write('results.fits', columns=['SWID', 'TSTART', 'TSTOP'])
+
+# Get SWID list
+swids = cat.get_swids()
 
 print(f"Found {len(results)} observations")
 ```
@@ -82,20 +97,49 @@ print(f"Found {len(results)} observations")
 ```python
 from isgri.utils import LightCurve, QualityMetrics
 
-# Load events with PIF weighting
+# Method 1: Load from file paths
 lc = LightCurve.load_data(
     events_path="isgri_events.fits",
     pif_path="source_model.fits",
+    use_pif=True,
     pif_threshold=0.5
 )
 
-# Create 1-second binned light curve
-time, counts = lc.rebin(binsize=1.0, emin=20, emax=100)
+# Method 2: Load by SWID (requires config)
+lc = LightCurve.load_data(swid="255900280010")
 
-# Compute quality metrics
-qm = QualityMetrics(lc, binsize=1.0, emin=20, emax=100)
-chi = qm.raw_chi_squared()
-print(f"Chisq/dof = {chi:.2f}")
+# Method 3: Load by SWID + source (auto-finds PIF)
+lc = LightCurve.load_data(
+    swid="255900280010",
+    source="SGR1935",
+    use_pif=True,
+    pif_threshold=0.5
+)
+
+# Create binned lightcurve
+time, counts = lc.rebin(binsize=1.0, emin=30, emax=100)
+
+# Override PIF settings temporarily
+time, counts = lc.rebin(binsize=1.0, emin=30, emax=100, use_pif=True, pif_threshold=0.8)
+
+# Or change instance settings
+lc.pif_threshold = 0.7
+lc.use_pif = True
+time, counts = lc.rebin(binsize=1.0, emin=30, emax=100)
+
+# Module-by-module analysis
+times, module_counts = lc.rebin_by_modules(binsize=1.0, emin=30, emax=300)
+
+# Quality metrics
+qm = QualityMetrics(lc, binsize=1.0, emin=30, emax=100)
+chi_raw = qm.raw_chi_squared()
+chi_clipped = qm.sigma_clip_chi_squared(sigma=1)
+chi_gti = qm.gti_chi_squared()
+print(f"Chisq/dof = {chi_raw:.2f}")
+
+# Time conversions
+from isgri.utils.time_conversion import ijd2utc, utc2ijd
+print(f"Start time: {ijd2utc(lc.t0)}")
 ```
 
 ## Configuration
@@ -107,17 +151,30 @@ ISGRI stores configuration in default config folder for each system (see: platfo
 isgri config
 
 # Set paths
-isgri config-set --archive /path/to/archive --catalog /path/to/catalog.fits
+isgri config-set --archive /path/to/archive
+isgri config-set --catalog /path/to/catalog.fits
+isgri config-set --pif /path/to/pif
+
+# Set all at once
+isgri config-set --archive /path/to/archive --catalog /path/to/catalog.fits --pif /path/to/pif
 ```
 
-Config can also be used in Python:
+Config in Python:
 
 ```python
-from isgri.config import get_config
+from isgri.config import Config
 
-cfg = get_config()
+cfg = Config()
 print(cfg.archive_path)
 print(cfg.catalog_path)
+print(cfg.pif_path)
+
+# Create new config programmatically
+cfg.create_new(
+    archive_path="/path/to/archive",
+    catalog_path="/path/to/catalog.fits",
+    pif_path="/path/to/pif"
+)
 ```
 
 Local config file `isgri_config.toml` in current directory overrides global config.
@@ -129,3 +186,8 @@ Local config file `isgri_config.toml` in current directory overrides global conf
 - **Catalog Tutorial**: [scwquery_walkthrough.ipynb](https://github.com/dominp/isgri/blob/main/demo/scwquery_walkthrough.ipynb)
 - **Light Curve Tutorial**: [lightcurve_walkthrough.ipynb](https://github.com/dominp/isgri/blob/main/demo/lightcurve_walkthrough.ipynb)
 - **API Reference**: Use `help()` in Python or see docstrings
+
+
+## License
+
+MIT
