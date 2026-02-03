@@ -80,7 +80,7 @@ def query_direct(
 
         if count:
             click.echo(q.count())
-        
+
         elif output:
             q.write(output, overwrite=True, swid_only=list_swids)
             click.echo(f"Saved {q.count()} SCWs to {output}")
@@ -89,10 +89,7 @@ def query_direct(
             results = q.get()
             click.echo(f"Found {len(results)}/{initial_count} SCWs")
             if len(results) > 0:
-                display_cols = ["SWID", "TSTART", "TSTOP", "RA_SCX", "DEC_SCX"]
-                chi_col = f"{chi_type}_CHI" if chi_type != "RAW" else "CHI"
-                if chi_col in results.colnames:
-                    display_cols.append(chi_col)
+                display_cols = ["SWID", "TSTART", "TSTOP", "RA_SCX", "DEC_SCX", "CHI", "CUT_CHI", "GTI_CHI"]
                 click.echo(results[display_cols][:10])
                 if len(results) > 10:
                     click.echo(f"... and {len(results) - 10} more")
@@ -117,7 +114,7 @@ def query_interactive(catalog_path):
             if cmd in ("exit", "quit", "q"):
                 break
             elif cmd == "help":
-                click.echo("Commands: time, pos, quality, show, reset, save, exit")
+                click.echo("Commands: time, pos, quality, revolution, show, reset, save, exit")
             elif cmd == "time":
                 tstart = click.prompt("Start", default="", show_default=False)
                 tstop = click.prompt("Stop", default="", show_default=False)
@@ -136,24 +133,29 @@ def query_interactive(catalog_path):
                     fov_mode = click.prompt("FOV mode", type=click.Choice(["full", "any"]), default="any")
                     q = q.position(ra=parse_coord(ra), dec=parse_coord(dec), fov_mode=fov_mode)
                 click.echo(f"→ {q.count()} SCWs")
-
             elif cmd == "quality":
                 max_chi = click.prompt("Max chi-squared", type=float)
-                chi_type = click.prompt("Chi type", type=click.Choice(["RAW", "CUT", "GTI"]), default="CUT")
+                chi_type = click.prompt("Chi type", type=click.Choice(["CHI", "CUT", "GTI"]), default="CUT")
                 q = q.quality(max_chi=max_chi, chi_type=chi_type)
                 click.echo(f"→ {q.count()} SCWs")
-
+            elif cmd == "revolution":
+                rev = click.prompt("Revolution number", type=int)
+                q = q.revolution(rev)
+                click.echo(f"→ {q.count()} SCWs")
             elif cmd == "show":
                 results = q.get()
                 click.echo(f"\n{len(results)} SCWs:")
-                click.echo(results[["SWID", "TSTART", "TSTOP"]])
+                display_cols = ["SWID", "TSTART", "TSTOP", "RA_SCX", "DEC_SCX", "CHI", "CUT_CHI", "GTI_CHI"]
+                click.echo(results[display_cols][:10])
+                if len(results) > 10:
+                    click.echo(f"... and {len(results) - 10} more")
             elif cmd == "reset":
                 q = q.reset()
                 click.echo(f"→ {len(q.catalog)} SCWs")
             elif cmd == "save":
-                only_scws = click.confirm("Save only SWID list?", default=False)
+                swid_only = click.confirm("Save only SWID list?", default=False)
                 path = click.prompt("File")
-                q.write(path, overwrite=True, swid_only=only_scws)
+                q.write(path, overwrite=True, swid_only=swid_only)
                 click.echo(f"✓ Saved")
             else:
                 click.echo(f"Unknown: {cmd}")

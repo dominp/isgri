@@ -130,7 +130,7 @@ class ScwQuery:
         max_chi : float, optional
             Maximum chi-squared value to accept
         chi_type : str, default "CHI"
-            Column name: "CHI", "CUT_CHI", or "GTI_CHI"
+            Column name: "CHI", "CUT", or "GTI"
 
         Returns
         -------
@@ -140,9 +140,12 @@ class ScwQuery:
         Examples
         --------
         >>> query.quality(max_chi=2.0)  # High quality data
-        >>> query.quality(max_chi=5.0, chi_type="CUT_CHI")  # Alternative metric
+        >>> query.quality(max_chi=5.0, chi_type="CUT")  # Alternative metric
 
         """
+        column_names = {"CHI": "CHI", "CUT": "CUT_CHI", "GTI": "GTI_CHI"}
+        chi_type = column_names.get(chi_type.upper(), chi_type)
+        
         if chi_type not in self.catalog.colnames:
             raise ValueError(f"Column {chi_type} not found in catalog")
 
