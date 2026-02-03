@@ -495,5 +495,5 @@ class LightCurve:
             f"LightCurve(n_events={len(self.time)}, "
             f"time_range=({self.time[0]:.3f}, {self.time[-1]:.3f}) IJD, "
             f"energy_range=({self.energies.min():.1f}, {self.energies.max():.1f}) keV, "
-            f"scw={self.metadata.get('SWID', 'Unknown')})"
+            f"scw={self.metadata.get('SWID', 'Unknown')}), use_pif={self.use_pif}, pif_threshold={self.pif_threshold})"
         )
