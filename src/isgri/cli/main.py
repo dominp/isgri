@@ -87,7 +87,7 @@ def config():
     """
     Show current configuration.
 
-    Displays paths to config file, archive directory, and catalog file,
+    Displays paths to config file, archive directory, catalog file, and PIF directory,
     along with their existence status.
     """
     cfg = Config()
@@ -100,25 +100,29 @@ def config():
     click.echo(f"Archive path: {archive if archive else '(not set)'}")
     if archive:
         click.echo(f"  Exists: {archive.exists()}")
+    click.echo()
 
-    try:
-        catalog = cfg.catalog_path
-        click.echo(f"Catalog path: {catalog if catalog else '(not set)'}")
-        if catalog:
-            click.echo(f"  Exists: {catalog.exists()}")
-    except FileNotFoundError as e:
-        click.echo(f"Catalog path: (configured but file not found)")
-        click.echo(f"  Error: {e}")
+    catalog = cfg.catalog_path
+    click.echo(f"Catalog path: {catalog if catalog else '(not set)'}")
+    if catalog:
+        click.echo(f"  Exists: {catalog.exists()}")
+    click.echo()
+
+    pif = cfg.pif_path
+    click.echo(f"PIF path: {pif if pif else '(not set)'}")
+    if pif:
+        click.echo(f"  Exists: {pif.exists()}")
 
 
 @main.command()
 @click.option("--archive", type=click.Path(), help="INTEGRAL archive directory path")
 @click.option("--catalog", type=click.Path(), help="Catalog FITS file path")
-def config_set(archive, catalog):
+@click.option("--pif", type=click.Path(), help="PIF directory path")
+def config_set(archive, catalog, pif):
     """
     Set configuration values.
 
-    Set default paths for archive directory and/or catalog file.
+    Set default paths for archive directory, catalog file, and/or PIF directory.
     Paths are expanded (~ becomes home directory) and resolved to absolute paths.
     Warns if path doesn't exist but allows setting anyway.
 
@@ -132,12 +136,16 @@ def config_set(archive, catalog):
 
             isgri config-set --catalog ~/data/scw_catalog.fits
 
-        Set both at once:
+        Set PIF path:
 
-            isgri config-set --archive /anita/archivio/ --catalog ~/data/scw_catalog.fits
+            isgri config-set --pif ~/data/pif/
+
+        Set all at once:
+
+            isgri config-set --archive /anita/archivio/ --catalog ~/data/scw_catalog.fits --pif ~/data/pif/
     """
-    if not archive and not catalog:
-        click.echo("Error: Specify at least one option (--archive or --catalog)", err=True)
+    if not archive and not catalog and not pif:
+        click.echo("Error: Specify at least one option (--archive, --catalog, or --pif)", err=True)
         raise click.Abort()
 
     cfg = Config()
@@ -159,6 +167,15 @@ def config_set(archive, catalog):
                 raise click.Abort()
         cfg.set(catalog_path=catalog_path)
         click.echo(f"✓ Catalog path set to: {catalog_path}")
+
+    if pif:
+        pif_path = Path(pif).expanduser().resolve()
+        if not pif_path.exists():
+            click.echo(f"Warning: PIF path does not exist: {pif_path}", err=True)
+            if not click.confirm("Set anyway?"):
+                raise click.Abort()
+        cfg.set(pif_path=pif_path)
+        click.echo(f"✓ PIF path set to: {pif_path}")
 
     click.echo()
     click.echo(f"Configuration saved to: {cfg.path}")

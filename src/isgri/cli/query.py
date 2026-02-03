@@ -50,17 +50,42 @@ def parse_coord(coord):
         return coord
 
 
+def match_command(user_input):
+    """Match user input to command, allowing partial matches."""
+    commands = {
+        "time": ["time", "t"],
+        "pos": ["pos", "position", "p"],
+        "quality": ["quality", "qual", "q"],
+        "revolution": ["revolution", "rev", "r"],
+        "show": ["show", "s", "display"],
+        "reset": ["reset", "clear"],
+        "save": ["save", "write"],
+        "help": ["help", "h", "?"],
+        "exit": ["exit", "quit", "q"],
+    }
+
+    user_input = user_input.lower().strip()
+
+    for cmd, aliases in commands.items():
+        if user_input in aliases:
+            return cmd
+        for alias in aliases:
+            if alias.startswith(user_input) and len(user_input) >= 2:
+                return cmd
+
+    return None
+
+
 def query_direct(
     catalog_path, tstart, tstop, ra, dec, radius, fov, max_chi, chi_type, revolution, output, list_swids, count
 ):
     try:
         q = ScwQuery(catalog_path)
         initial_count = len(q.catalog)
-        # Parse times (handle both IJD and ISO)
+
         tstart = parse_time(tstart)
         tstop = parse_time(tstop)
 
-        # Apply filters
         if tstart or tstop:
             q = q.time(tstart=tstart, tstop=tstop)
 
@@ -76,7 +101,8 @@ def query_direct(
             q = q.quality(max_chi=max_chi, chi_type=chi_type)
 
         if revolution:
-            q = q.revolution(revolution)
+            rev_list = [int(r.strip()) for r in revolution.split(",")]
+            q = q.revolution(rev_list)
 
         if count:
             click.echo(q.count())
@@ -100,21 +126,35 @@ def query_direct(
 
 
 def query_interactive(catalog_path):
-    """Run interactive query session."""
     click.echo("=== Interactive Query Mode ===\n")
 
     q = ScwQuery(catalog_path)
     click.echo(f"Loaded {len(q.catalog)} SCWs")
-    click.echo("Type 'help' for commands\n")
+    click.echo("Type 'help' for available commands\n")
 
     while True:
         try:
-            cmd = click.prompt("query>", default="").strip().lower()
+            user_input = click.prompt("query>", default="").strip()
+            cmd = match_command(user_input)
 
-            if cmd in ("exit", "quit", "q"):
+            if cmd == "exit":
                 break
             elif cmd == "help":
-                click.echo("Commands: time, pos, quality, revolution, show, reset, save, exit")
+                click.echo("\nAvailable commands:")
+                click.echo("  time       - Filter by time range")
+                click.echo("  pos        - Filter by position (FOV or radius)")
+                click.echo("  quality    - Filter by chi-squared quality")
+                click.echo("  revolution - Filter by revolution number(s)")
+                click.echo("  show       - Display current results")
+                click.echo("  reset      - Clear all filters")
+                click.echo("  save       - Save results to file")
+                click.echo("  exit       - Exit interactive mode")
+                click.echo("\nExamples:")
+                click.echo("  time: Start=2020-01-01, Stop=2020-12-31 or IJD")
+                click.echo("  pos: RA=83.63, Dec=22.01 (degrees or sexagesimal)")
+                click.echo("  revolution: 1234 (single) or 1234, 1235, 1236 (multiple)")
+                click.echo("\nTip: You can use abbreviations (t, p, q, rev, etc.)")
+                click.echo()
             elif cmd == "time":
                 tstart = click.prompt("Start", default="", show_default=False)
                 tstop = click.prompt("Stop", default="", show_default=False)
@@ -139,9 +179,11 @@ def query_interactive(catalog_path):
                 q = q.quality(max_chi=max_chi, chi_type=chi_type)
                 click.echo(f"→ {q.count()} SCWs")
             elif cmd == "revolution":
-                rev = click.prompt("Revolution number", type=int)
-                q = q.revolution(rev)
-                click.echo(f"→ {q.count()} SCWs")
+                rev_str = click.prompt("Revolution(s)", default="", show_default=False)
+                if rev_str:
+                    rev_list = [int(r.strip()) for r in rev_str.split(",")]
+                    q = q.revolution(rev_list)
+                    click.echo(f"→ {q.count()} SCWs")
             elif cmd == "show":
                 results = q.get()
                 click.echo(f"\n{len(results)} SCWs:")
@@ -157,8 +199,10 @@ def query_interactive(catalog_path):
                 path = click.prompt("File")
                 q.write(path, overwrite=True, swid_only=swid_only)
                 click.echo(f"✓ Saved")
+            elif cmd is None:
+                click.echo(f"Unknown command: {user_input}. Type 'help' for available commands.")
             else:
-                click.echo(f"Unknown: {cmd}")
+                click.echo(f"Unknown command: {user_input}. Type 'help' for available commands.")
 
         except KeyboardInterrupt:
             click.echo("\nUse 'exit' to quit")
